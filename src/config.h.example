@@ -1,0 +1,8 @@
+#ifndef ESP_GW_CONFIG_H
+#define ESP_GW_CONFIG_H
+
+const char aesKey[] = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"; // 128 bits hex representation (32 characters) 
+const char ssid[] = "YOUR_WIFI_SSID";
+const char password[] = "YOUR_WIFI_PASSWORD";
+
+#endif

@@ -30,3 +30,7 @@
 *.exe
 *.out
 *.app
+
+.pio
+.vscode
+src/config.h
