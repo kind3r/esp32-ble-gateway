@@ -4,6 +4,7 @@ WiFi to BLE gateway on ESP32 using noble websocket protocol
 ### Todo
 
 - Move websocket messages processing into separate class
+- Maybe move IV used for auth into `AsyncWebSocketClient::_tempObject`
 - Enable BLE and try scanning
 - Limit total number of websocket connections
 - Timeout for non-authenticated connections
