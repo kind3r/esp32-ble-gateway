@@ -1,4 +1,5 @@
 #include "noble_api.h"
+#include "ble_api.h"
 
 #define LOG_LOCAL_LEVEL 5
 
@@ -24,15 +25,13 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
   {
     IPAddress ip = ws->remoteIP(client);
     Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", client, ip[0], ip[1], ip[2], ip[3], payload);
-
-    // send message to client
-    // ws->sendTXT(num, "Connected");
+    // Generate IV and send auth request
     initClient(client);
     sendAuthMessage(client);
   }
   else if (type == WStype_TEXT)
   {
-    Serial.printf("[%u] get Text: %s\n", client, payload);
+    Serial.printf("[%u] get  Text: %s\n", client, payload);
 
     StaticJsonDocument<1024> command;
     DeserializationError error = deserializeJson(command, payload, length);
@@ -69,6 +68,12 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
         else
         {
           // client is authenticated, allow other commands
+          if (strcmp(action, "startScanning") == 0)
+          {
+            BLEApi::startScan();
+          } else if (strcmp(action, "stopScanning") == 0) {
+            BLEApi::stopScan();
+          }
         }
       }
     }
@@ -78,103 +83,6 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
     Serial.printf("Type not implemented [%u]\n", type);
   }
 }
-
-// void NobleApi::onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len)
-// {
-//   if (client->_tempObject)
-//   {
-//     Serial.println("temp object exists");
-//   }
-//   if (client->_tempObject == nullptr)
-//   {
-//     Serial.println("temp obj is nulptr");
-//   }
-//   if (type == WS_EVT_CONNECT)
-//   {
-//     //client connected
-//     initClient(*client);
-//     if (client->_tempObject)
-//     {
-//       Serial.println("temp object exists");
-//     }
-//     if (client->_tempObject == nullptr)
-//     {
-//       Serial.println("temp obj is nulptr");
-//     }
-//     Serial.printf("ws[%s][%u] connect\n", server->url(), client->id());
-//     sendAuthMessage(*client);
-//   }
-//   else if (type == WS_EVT_DISCONNECT)
-//   {
-//     //client disconnected
-//     // removeClient(client);
-//     Serial.printf("ws[%s][%u] disconnect\n", server->url(), client->id());
-//   }
-//   else if (type == WS_EVT_ERROR)
-//   {
-//     //error was received from the other end
-//     Serial.printf("ws[%s][%u] error(%u): %s\n", server->url(), client->id(), *((uint16_t *)arg), (char *)data);
-//   }
-//   else if (type == WS_EVT_PONG)
-//   {
-//     //pong message was received (in response to a ping request maybe)
-//     Serial.printf("ws[%s][%u] pong[%u]: %s\n", server->url(), client->id(), len, (len) ? (char *)data : "");
-//   }
-//   else if (type == WS_EVT_DATA)
-//   {
-//     // testEncryption();
-//     //data packet
-//     AwsFrameInfo *info = (AwsFrameInfo *)arg;
-//     if (info->final && info->index == 0 && info->len == len)
-//     {
-//       //the whole message is in a single frame and we got all of it's data
-//       Serial.printf("ws[%s][%u] %s-message[%llu]: ", server->url(), client->id(), (info->opcode == WS_TEXT) ? "text" : "binary", info->len);
-//       if (info->opcode == WS_TEXT)
-//       {
-//         data[len] = 0;
-//         Serial.printf("%s\n", (char *)data);
-
-//         StaticJsonDocument<1024> command;
-//         DeserializationError error = deserializeJson(command, data);
-
-//         if (error)
-//         { //Check for errors in parsing
-//           Serial.println("Parsing failed");
-//           Serial.println(error.f_str());
-//           return;
-//         }
-//         else
-//         {
-//           const char *action = command["action"];
-//           if (action)
-//           {
-//             bool authenticated = false;
-//             if (client->_tempObject == nullptr)
-//             {
-//               authenticated = true;
-//             }
-//             if (!authenticated)
-//             {
-//               // client is not authenticated, only respond to auth
-//               if (strcmp(action, "auth") == 0)
-//               {
-//                 const char *response = command["response"];
-//                 if (response)
-//                 {
-//                   checkAuth(*client, response);
-//                 }
-//               }
-//             }
-//             else
-//             {
-//               // client is authenticated, allow other commands
-//             }
-//           }
-//         }
-//       }
-//     }
-//   }
-// }
 
 void NobleApi::initClient(uint8_t client)
 {
@@ -227,8 +135,8 @@ void NobleApi::sendJsonMessage(uint8_t client, JsonDocument &command)
   // String buffer;
   serializeJson(command, buffer, messageLength);
   buffer[messageLength] = '\0';
-  ESP_LOG_BUFFER_HEXDUMP("Send", buffer, messageLength, esp_log_level_t::ESP_LOG_INFO);
-  Serial.println(buffer);
+  // ESP_LOG_BUFFER_HEXDUMP("Send", buffer, messageLength, esp_log_level_t::ESP_LOG_INFO);
+  Serial.printf("[%u] sent Text: %s\n", client, buffer);
   ws->sendTXT(client, buffer);
 }
 
@@ -249,7 +157,14 @@ void NobleApi::sendState(uint8_t client)
 {
   StaticJsonDocument<64> command;
   command["type"] = "stateChange";
-  command["state"] = "poweredOff";
+  if (BLEApi::isReady())
+  {
+    command["state"] = "poweredOn";
+  }
+  else
+  {
+    command["state"] = "poweredOff";
+  }
   sendJsonMessage(client, command);
   command.clear();
 }

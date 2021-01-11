@@ -1,5 +1,4 @@
 #include <config.h>
-#include "esp_log.h"
 #include "Arduino.h"
 
 #include <WiFi.h>
@@ -14,6 +13,8 @@ Security sec = Security();
 
 #include "noble_api.h"
 NobleApi noble = NobleApi(&sec, &webSocket);
+
+#include "ble_api.h"
 
 bool setupWifi()
 {
@@ -40,6 +41,11 @@ void setupServer()
   ));
 }
 
+
+void setupBLE() {
+  BLEApi::init();
+}
+
 void setup()
 {
   Serial.begin(115200);
@@ -52,7 +58,10 @@ void setup()
     delay(200);
   } while (!setupWifi());
 
+  setupBLE();
+
   setupServer();
+  // BLEApi::startScan(10);
 
   Serial.println("Setup complete");
 }
