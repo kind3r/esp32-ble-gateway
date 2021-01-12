@@ -20,6 +20,9 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
   {
     Serial.printf("[%u] Disconnected!\n", client);
     challenges.erase(client);
+    if (ws->connectedClients() == 0) {
+      BLEApi::stopScan();
+    }
   }
   else if (type == WStype_CONNECTED)
   {
@@ -59,9 +62,10 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
           if (strcmp(action, "auth") == 0)
           {
             const char *response = command["response"];
-            if (response)
+            if (strlen(response) > 0)
             {
               checkAuth(client, response);
+              command.clear();
             }
           }
         }
@@ -70,8 +74,10 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
           // client is authenticated, allow other commands
           if (strcmp(action, "startScanning") == 0)
           {
+            command.clear();
             BLEApi::startScan();
           } else if (strcmp(action, "stopScanning") == 0) {
+            command.clear();
             BLEApi::stopScan();
           }
         }

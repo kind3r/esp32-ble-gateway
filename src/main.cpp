@@ -14,7 +14,11 @@ Security sec = Security();
 #include "noble_api.h"
 NobleApi noble = NobleApi(&sec, &webSocket);
 
+#include <esp_bt.h>
+#include <BLEDevice.h>
 #include "ble_api.h"
+
+#include "util.h"
 
 bool setupWifi()
 {
@@ -43,6 +47,7 @@ void setupServer()
 
 
 void setupBLE() {
+  esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
   BLEApi::init();
 }
 
@@ -61,9 +66,9 @@ void setup()
   setupBLE();
 
   setupServer();
-  // BLEApi::startScan(10);
 
   Serial.println("Setup complete");
+  meminfo("After full setup");
 }
 
 void loop()
