@@ -33,4 +33,4 @@
 
 .pio
 .vscode
-src/config.h
+src/config.cpp

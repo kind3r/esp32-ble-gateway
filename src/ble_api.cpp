@@ -15,13 +15,16 @@ BLEAdvertisedDeviceCallbacks *BLEApi::_advertisedDeviceCallback = new myAdvertis
 
 void BLEApi::init()
 {
-  BLEDevice::init("ESP32BLEGW");
-  bleScan = BLEDevice::getScan();
-  bleScan->setAdvertisedDeviceCallbacks(BLEApi::_advertisedDeviceCallback);
-  bleScan->setInterval(1349);
-  bleScan->setWindow(449);
-  bleScan->setActiveScan(true);
-  _isReady = true;
+  if (!_isReady) {
+    esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
+    BLEDevice::init("ESP32BLEGW");
+    bleScan = BLEDevice::getScan();
+    bleScan->setAdvertisedDeviceCallbacks(BLEApi::_advertisedDeviceCallback);
+    bleScan->setInterval(1349);
+    bleScan->setWindow(449);
+    bleScan->setActiveScan(true);
+    _isReady = true;
+  }
 }
 
 bool BLEApi::isReady() {

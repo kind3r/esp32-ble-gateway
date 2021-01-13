@@ -3,13 +3,7 @@
 
 #include <WiFi.h>
 
-#include <WebSocketsServer.h>
-WebSocketsServer webSocket = WebSocketsServer(80);
-
 #include <ArduinoJson.h>
-
-#include "security.h"
-Security sec = Security();
 
 #include "noble_api.h"
 
@@ -35,32 +29,17 @@ bool setupWifi()
   return true;
 }
 
-void setupServer()
-{
-  NobleApi::init(&sec);
-}
-
-
-void setupBLE() {
-  esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
-  BLEApi::init();
-}
-
 void setup()
 {
   Serial.begin(115200);
   esp_log_level_set("*", ESP_LOG_INFO);
-
-  sec.setKey(aesKey);
 
   do
   {
     delay(200);
   } while (!setupWifi());
 
-  setupBLE();
-
-  setupServer();
+  NobleApi::init();
 
   Serial.println("Setup complete");
   meminfo("After full setup");
@@ -68,5 +47,5 @@ void setup()
 
 void loop()
 {
-  webSocket.loop();
+  NobleApi::loop();
 }

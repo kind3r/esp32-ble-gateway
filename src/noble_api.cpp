@@ -1,18 +1,21 @@
 #include "noble_api.h"
-#include "ble_api.h"
 
 Security *NobleApi::sec = nullptr;
 WebSocketsServer *NobleApi::ws = nullptr;
 std::map<uint32_t, std::string> *NobleApi::challenges = nullptr;
 
-void NobleApi::init(Security *security)
+void NobleApi::init()
 {
-  sec = security;
+  sec = new Security(aesKey);
   challenges = new std::map<uint32_t, std::string>();
+  BLEApi::init();
   ws = new WebSocketsServer(ESP_GW_WEBSOCKET_PORT);
   ws->begin();
-  ws->onEvent(std::bind(onWsEvent, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
-  Serial.println(ESP_GW_WEBSOCKET_PORT);
+  ws->onEvent(onWsEvent);
+}
+
+void NobleApi::loop() {
+  ws->loop();
 }
 
 void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t length)
@@ -41,20 +44,19 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
     StaticJsonDocument<1024> command;
     DeserializationError error = deserializeJson(command, payload, length);
 
-    if (error)
+    if (error != DeserializationError::Ok)
     { //Check for errors in parsing
-      Serial.println("Parsing failed");
+      Serial.printf("Message parsing failed: ");
       Serial.println(error.f_str());
       return;
     }
     else
     {
       const char *action = command["action"];
-      if (action)
+      if (action && strlen(action) > 0)
       {
         bool authenticated = false;
-        std::string stringIV = challenges->at(client);
-        if (stringIV.length() == 0)
+        if (challenges->find(client) == challenges->end())
         {
           authenticated = true;
         }
@@ -109,11 +111,11 @@ void NobleApi::checkAuth(uint8_t client, const char *response)
   const size_t responseLength = strlen(response);
   if (responseLength % BLOCK_SIZE == 0)
   {
-    std::string stringIV = challenges->at(client);
-    if (stringIV.length() > 0)
+    std::map<uint32_t, std::string>::iterator it = challenges->find(client);
+    if (it != challenges->end())
     {
       uint8_t iv[BLOCK_SIZE];
-      sec->fromHex(stringIV.c_str(), stringIV.length(), iv);
+      sec->fromHex(it->second.c_str(), it->second.length(), iv);
 
       uint8_t encryptedResponse[responseLength / 2];
       size_t encryptedResponseLength = sec->fromHex(response, responseLength, encryptedResponse);
@@ -152,12 +154,12 @@ void NobleApi::sendJsonMessage(uint8_t client, JsonDocument &command)
 
 void NobleApi::sendAuthMessage(uint8_t client)
 {
-  std::string stringIV = challenges->at(client);
-  if (stringIV.length() > 0)
+  std::map<uint32_t, std::string>::iterator it = challenges->find(client);
+  if (it != challenges->end())
   {
     StaticJsonDocument<128> command;
     command["type"] = "auth";
-    command["challenge"] = stringIV;
+    command["challenge"] = it->second;
     sendJsonMessage(client, command);
     command.clear();
   }
