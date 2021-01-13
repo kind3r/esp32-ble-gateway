@@ -5,20 +5,25 @@ bool BLEApi::_isReady = false;
 bool BLEApi::_isScanning = false;
 bool BLEApi::_scanMustStop = false;
 BLEScan *BLEApi::bleScan = nullptr;
+BLEDeviceFound BLEApi::_cbOnDeviceFound = nullptr;
+BLEAdvertisedDeviceCallbacks *BLEApi::_advertisedDeviceCallback = nullptr;
 
-class myAdvertisedDeviceCallback: public BLEAdvertisedDeviceCallbacks {
-  void onResult(BLEAdvertisedDevice advertisedDevice) {
-    BLEApi::onDeviceFound(advertisedDevice);
+class myAdvertisedDeviceCallback : public BLEAdvertisedDeviceCallbacks
+{
+  void onResult(BLEAdvertisedDevice advertisedDevice)
+  {
+    BLEApi::_onDeviceFoundProxy(advertisedDevice);
   }
 };
-BLEAdvertisedDeviceCallbacks *BLEApi::_advertisedDeviceCallback = new myAdvertisedDeviceCallback();
 
 void BLEApi::init()
 {
-  if (!_isReady) {
+  if (!_isReady)
+  {
     esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
     BLEDevice::init("ESP32BLEGW");
     bleScan = BLEDevice::getScan();
+    _advertisedDeviceCallback = new myAdvertisedDeviceCallback();
     bleScan->setAdvertisedDeviceCallbacks(BLEApi::_advertisedDeviceCallback);
     bleScan->setInterval(1349);
     bleScan->setWindow(449);
@@ -27,7 +32,8 @@ void BLEApi::init()
   }
 }
 
-bool BLEApi::isReady() {
+bool BLEApi::isReady()
+{
   return _isReady;
 }
 
@@ -64,18 +70,17 @@ bool BLEApi::stopScan()
   return false;
 }
 
-void BLEApi::onDeviceFound(BLEAdvertisedDevice advertisedDevice)
+void BLEApi::onDeviceFound(BLEDeviceFound cb)
 {
-  Serial.print("BLE found: ");
-  Serial.println(advertisedDevice.toString().c_str());
-  // std::string name = "";
-  // std::string address = advertisedDevice.getAddress().toString();
-  // std::string manufacturerData = "";
-  // if (advertisedDevice.haveManufacturerData()) {
-  //   manufacturerData = advertisedDevice.getManufacturerData();
-  // }
+  _cbOnDeviceFound = cb;
+}
 
-
+void BLEApi::_onDeviceFoundProxy(BLEAdvertisedDevice advertisedDevice)
+{
+  if (_cbOnDeviceFound)
+  {
+    _cbOnDeviceFound(advertisedDevice);
+  }
 }
 
 void BLEApi::onScanFinished(BLEScanResults results)

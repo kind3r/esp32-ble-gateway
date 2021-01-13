@@ -8,6 +8,8 @@
 
 #define DEFAULT_SCAN_DURATION 10
 
+typedef std::function<void(BLEAdvertisedDevice advertisedDevice)> BLEDeviceFound;
+
 class BLEApi
 {
 public:
@@ -15,8 +17,9 @@ public:
   static bool isReady();
   static bool startScan(uint32_t duration = 0);
   static bool stopScan();
+  static void onDeviceFound(BLEDeviceFound cb);
 
-  static void onDeviceFound(BLEAdvertisedDevice advertisedDevice);
+  static void _onDeviceFoundProxy(BLEAdvertisedDevice advertisedDevice);
 private:
   static bool _isReady;
   static bool _isScanning;
@@ -24,6 +27,9 @@ private:
   static BLEAdvertisedDeviceCallbacks *_advertisedDeviceCallback;
   static BLEScan *bleScan;
   static void onScanFinished(BLEScanResults results);
+  static BLEDeviceFound _cbOnDeviceFound;
 };
+
+
 
 #endif

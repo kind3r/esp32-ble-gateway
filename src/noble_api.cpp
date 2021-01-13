@@ -9,12 +9,14 @@ void NobleApi::init()
   sec = new Security(aesKey);
   challenges = new std::map<uint32_t, std::string>();
   BLEApi::init();
+  BLEApi::onDeviceFound(onBLEDeviceFound);
   ws = new WebSocketsServer(ESP_GW_WEBSOCKET_PORT);
   ws->begin();
   ws->onEvent(onWsEvent);
 }
 
-void NobleApi::loop() {
+void NobleApi::loop()
+{
   ws->loop();
 }
 
@@ -96,6 +98,65 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
   }
 }
 
+void NobleApi::onBLEDeviceFound(BLEAdvertisedDevice advertisedDevice)
+{
+  // Serial.print("BLE found: ");
+  // Serial.println(advertisedDevice.toString().c_str());
+  /**
+   * type: 'discover',
+    peripheralUuid: peripheral.uuid,
+    address: peripheral.address,
+    addressType: peripheral.addressType,
+    connectable: peripheral.connectable,
+    advertisement: {
+      localName: peripheral.advertisement.localName,
+      txPowerLevel: peripheral.advertisement.txPowerLevel,
+      serviceUuids: peripheral.advertisement.serviceUuids,
+      manufacturerData: (peripheral.advertisement.manufacturerData ? peripheral.advertisement.manufacturerData.toString('hex') : null),
+      serviceData: (peripheral.advertisement.serviceData ? peripheral.advertisement.serviceData.toString('hex') : null)
+    },
+    rssi: peripheral.rssi
+    */
+  StaticJsonDocument<1024> command;
+  command["type"] = "discover";
+  command["peripheralUuid"] = advertisedDevice.getAddress().toString();
+  command["address"] = advertisedDevice.getAddress().toString();
+  if (advertisedDevice.getAddressType() == BLE_ADDR_TYPE_PUBLIC || advertisedDevice.getAddressType() == BLE_ADDR_TYPE_RPA_PUBLIC)
+  {
+    command["addressType"] = "public";
+  }
+  else if (advertisedDevice.getAddressType() == BLE_ADDR_TYPE_RANDOM || advertisedDevice.getAddressType() == BLE_ADDR_TYPE_RPA_RANDOM)
+  {
+    command["addressType"] = "random";
+  }
+  else
+  {
+    command["addressType"] = "unknown";
+  }
+  command["connectable"] = "true";
+  command["rssi"] = advertisedDevice.getRSSI();
+  command["advertisement"]["localName"] = advertisedDevice.getName();
+  if (advertisedDevice.haveTXPower())
+  {
+    command["advertisement"]["txPowerLevel"] = advertisedDevice.getTXPower();
+  }
+  if (advertisedDevice.haveServiceUUID())
+  {
+    JsonArray serviceUuids = command["advertisement"].createNestedArray("serviceUuids");
+    serviceUuids.add(advertisedDevice.getServiceUUID().toString());
+  }
+  if (advertisedDevice.haveManufacturerData())
+  {
+    char manufacturerData[advertisedDevice.getManufacturerData().length() * 2 + 1];
+    sec->toHex((uint8_t *)advertisedDevice.getManufacturerData().data(), advertisedDevice.getManufacturerData().length(), manufacturerData);
+    manufacturerData[advertisedDevice.getManufacturerData().length() * 2 + 1] = '\0';
+    command["advertisement"]["manufacturerData"] = manufacturerData;
+  }
+
+  sendJsonMessage(command);
+  command.clear();
+}
+
 void NobleApi::initClient(uint8_t client)
 {
   uint8_t iv[BLOCK_SIZE];
@@ -150,6 +211,24 @@ void NobleApi::sendJsonMessage(uint8_t client, JsonDocument &command)
   // ESP_LOG_BUFFER_HEXDUMP("Send", buffer, messageLength, esp_log_level_t::ESP_LOG_INFO);
   Serial.printf("[%u] sent Text: %s\n", client, buffer);
   ws->sendTXT(client, buffer);
+}
+
+void NobleApi::sendJsonMessage(JsonDocument &command)
+{
+  ws->connectedClients();
+  std::map<uint32_t, std::string>::iterator it;
+  for (uint8_t client = 0; client < WEBSOCKETS_SERVER_CLIENT_MAX; client++)
+  {
+    if (ws->clientIsConnected(client))
+    {
+      // only send to auth clients
+      it = challenges->find(client);
+      if (it == challenges->end())
+      {
+        sendJsonMessage(client, command);
+      }
+    }
+  }
 }
 
 void NobleApi::sendAuthMessage(uint8_t client)
