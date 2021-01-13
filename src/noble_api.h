@@ -1,6 +1,12 @@
 #ifndef ESP_GW_NOBLE_API_H
 #define ESP_GW_NOBLE_API_H
 
+#define LOG_LOCAL_LEVEL 5
+
+#ifndef ESP_GW_WEBSOCKET_PORT
+#define ESP_GW_WEBSOCKET_PORT 80
+#endif
+
 #include <WebSocketsServer.h>
 #include <ArduinoJson.h>
 #include <map>
@@ -8,18 +14,17 @@
 
 class NobleApi {
   public:
-    NobleApi(Security *security, WebSocketsServer *server);
-    ~NobleApi();
-    void onWsEvent(uint8_t client, WStype_t type, uint8_t * payload, size_t length);
+    static void init(Security *security);
+    static void onWsEvent(uint8_t client, WStype_t type, uint8_t * payload, size_t length);
   private:
-    Security *sec;
-    WebSocketsServer *ws;
-    std::map<uint32_t, std::string> challenges;
-    void initClient(uint8_t client);
-    void checkAuth(uint8_t client, const char *response);
-    void sendJsonMessage(uint8_t client, JsonDocument &command);
-    void sendAuthMessage(uint8_t client);
-    void sendState(uint8_t client);
+    static Security *sec;
+    static WebSocketsServer *ws;
+    static std::map<uint32_t, std::string> *challenges;
+    static void initClient(uint8_t client);
+    static void checkAuth(uint8_t client, const char *response);
+    static void sendJsonMessage(uint8_t client, JsonDocument &command);
+    static void sendAuthMessage(uint8_t client);
+    static void sendState(uint8_t client);
 };
 
 #endif

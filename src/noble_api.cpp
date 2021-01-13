@@ -1,26 +1,28 @@
 #include "noble_api.h"
 #include "ble_api.h"
 
-#define LOG_LOCAL_LEVEL 5
+Security *NobleApi::sec = nullptr;
+WebSocketsServer *NobleApi::ws = nullptr;
+std::map<uint32_t, std::string> *NobleApi::challenges = nullptr;
 
-NobleApi::NobleApi(Security *security, WebSocketsServer *server)
+void NobleApi::init(Security *security)
 {
   sec = security;
-  ws = server;
-}
-
-NobleApi::~NobleApi()
-{
+  challenges = new std::map<uint32_t, std::string>();
+  ws = new WebSocketsServer(ESP_GW_WEBSOCKET_PORT);
+  ws->begin();
+  ws->onEvent(std::bind(onWsEvent, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
+  Serial.println(ESP_GW_WEBSOCKET_PORT);
 }
 
 void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t length)
 {
-
   if (type == WStype_DISCONNECTED)
   {
     Serial.printf("[%u] Disconnected!\n", client);
-    challenges.erase(client);
-    if (ws->connectedClients() == 0) {
+    challenges->erase(client);
+    if (ws->connectedClients() == 0)
+    {
       BLEApi::stopScan();
     }
   }
@@ -51,7 +53,7 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
       if (action)
       {
         bool authenticated = false;
-        std::string stringIV = challenges[client];
+        std::string stringIV = challenges->at(client);
         if (stringIV.length() == 0)
         {
           authenticated = true;
@@ -76,7 +78,9 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
           {
             command.clear();
             BLEApi::startScan();
-          } else if (strcmp(action, "stopScanning") == 0) {
+          }
+          else if (strcmp(action, "stopScanning") == 0)
+          {
             command.clear();
             BLEApi::stopScan();
           }
@@ -96,7 +100,7 @@ void NobleApi::initClient(uint8_t client)
   sec->generateIV(iv);
   char stringIV[BLOCK_SIZE * 2 + 1];
   sec->toHex(iv, BLOCK_SIZE, stringIV);
-  challenges[client] = stringIV;
+  challenges->insert({client, stringIV});
 }
 
 void NobleApi::checkAuth(uint8_t client, const char *response)
@@ -105,7 +109,7 @@ void NobleApi::checkAuth(uint8_t client, const char *response)
   const size_t responseLength = strlen(response);
   if (responseLength % BLOCK_SIZE == 0)
   {
-    std::string stringIV = challenges[client];
+    std::string stringIV = challenges->at(client);
     if (stringIV.length() > 0)
     {
       uint8_t iv[BLOCK_SIZE];
@@ -120,7 +124,7 @@ void NobleApi::checkAuth(uint8_t client, const char *response)
 
       if (strcmp((char *)decryptedResponse, "admin:admin") == 0)
       {
-        challenges.erase(client);
+        challenges->erase(client);
         sendState(client);
       }
       else
@@ -148,7 +152,7 @@ void NobleApi::sendJsonMessage(uint8_t client, JsonDocument &command)
 
 void NobleApi::sendAuthMessage(uint8_t client)
 {
-  std::string stringIV = challenges[client];
+  std::string stringIV = challenges->at(client);
   if (stringIV.length() > 0)
   {
     StaticJsonDocument<128> command;

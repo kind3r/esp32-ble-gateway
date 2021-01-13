@@ -12,7 +12,6 @@ WebSocketsServer webSocket = WebSocketsServer(80);
 Security sec = Security();
 
 #include "noble_api.h"
-NobleApi noble = NobleApi(&sec, &webSocket);
 
 #include <esp_bt.h>
 #include <BLEDevice.h>
@@ -38,11 +37,7 @@ bool setupWifi()
 
 void setupServer()
 {
-  webSocket.begin();
-  webSocket.onEvent(std::bind(
-    &NobleApi::onWsEvent, noble, 
-    std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4
-  ));
+  NobleApi::init(&sec);
 }
 
 
