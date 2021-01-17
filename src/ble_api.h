@@ -17,6 +17,7 @@ public:
   static bool isReady();
   static bool startScan(uint32_t duration = 0);
   static bool stopScan();
+  static void connect(const char *peripheralUuid);
   static void onDeviceFound(BLEDeviceFound cb);
 
   static void _onDeviceFoundProxy(BLEAdvertisedDevice advertisedDevice);

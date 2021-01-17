@@ -25,8 +25,8 @@ void BLEApi::init()
     bleScan = BLEDevice::getScan();
     _advertisedDeviceCallback = new myAdvertisedDeviceCallback();
     bleScan->setAdvertisedDeviceCallbacks(BLEApi::_advertisedDeviceCallback);
-    bleScan->setInterval(1349);
-    bleScan->setWindow(449);
+    bleScan->setInterval(1250); // 1349
+    bleScan->setWindow(650); // 449
     bleScan->setActiveScan(true);
     _isReady = true;
   }
@@ -47,6 +47,7 @@ bool BLEApi::startScan(uint32_t duration)
   if (duration == 0)
   {
     duration = DEFAULT_SCAN_DURATION;
+    _scanMustStop = false;
   }
   else
   {
@@ -63,11 +64,24 @@ bool BLEApi::stopScan()
   {
     _scanMustStop = true;
     bleScan->stop(); // this does not call the callback onScanFinished
+    bleScan->clearResults();
     _isScanning = false;
-    Serial.println("BLE Scan stopped");
+    Serial.println("BLE Scan stopped on demand");
     return true;
   }
   return false;
+}
+
+void BLEApi::connect(const char *peripheralUuid) {
+  BLEApi::stopScan();
+  BLEClient *peripheral = BLEDevice::createClient();
+  BLEAddress address = BLEAddress(peripheralUuid);
+  bool connected = peripheral->connect(address);
+  if (connected) {
+    Serial.printf("Connected to [%s]\n", peripheralUuid);
+  } else {
+    Serial.printf("Could not connect to [%s]\n", peripheralUuid);
+  }
 }
 
 void BLEApi::onDeviceFound(BLEDeviceFound cb)
@@ -88,12 +102,13 @@ void BLEApi::onScanFinished(BLEScanResults results)
   if (_scanMustStop)
   {
     _isScanning = false;
-    Serial.println("BLE Scan stopped");
+    bleScan->clearResults();
+    Serial.println("BLE Scan stopped finished");
   }
   else
   {
     Serial.println("BLE Scan restarted");
     // Because of stupid callback
-    bleScan->start(DEFAULT_SCAN_DURATION, BLEApi::onScanFinished, false);
+    bleScan->start(DEFAULT_SCAN_DURATION, BLEApi::onScanFinished, true);
   }
 }

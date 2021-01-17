@@ -88,6 +88,12 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
             command.clear();
             BLEApi::stopScan();
           }
+          else if (strcmp(action, "connect") == 0)
+          {
+            const char *peripheralUuid = command["peripheralUuid"];
+            BLEApi::connect(peripheralUuid);
+            command.clear();
+          }
         }
       }
     }
