@@ -42,7 +42,7 @@ void setup()
   NobleApi::init();
 
   Serial.println("Setup complete");
-  // meminfo("After full setup");
+  meminfo();
 }
 
 void loop()

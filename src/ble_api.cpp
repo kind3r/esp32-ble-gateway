@@ -1,5 +1,18 @@
 #include "ble_api.h"
 #include <BLEDevice.h>
+#include <freertos/FreeRTOS.h>
+
+namespace std
+{
+  template <>
+  struct less<BLEApiAddress>
+  {
+    bool operator()(const BLEApiAddress &lhs, const BLEApiAddress &rhs) const
+    {
+      return lhs.address < rhs.address;
+    }
+  };
+} // namespace std
 
 bool BLEApi::_isReady = false;
 bool BLEApi::_isScanning = false;
@@ -7,6 +20,8 @@ bool BLEApi::_scanMustStop = false;
 BLEScan *BLEApi::bleScan = nullptr;
 BLEDeviceFound BLEApi::_cbOnDeviceFound = nullptr;
 BLEAdvertisedDeviceCallbacks *BLEApi::_advertisedDeviceCallback = nullptr;
+std::map<BLEApiAddress, esp_ble_addr_type_t> BLEApi::addressTypes;
+std::map<std::string, BLEClient *> BLEApi::connections;
 
 class myAdvertisedDeviceCallback : public BLEAdvertisedDeviceCallbacks
 {
@@ -86,25 +101,6 @@ bool BLEApi::stopScan()
 }
 
 /**
- * Connect to a device
- */
-void BLEApi::connect(const char *peripheralUuid)
-{
-  BLEApi::stopScan();
-  BLEClient *peripheral = BLEDevice::createClient();
-  BLEAddress address = BLEAddress(peripheralUuid);
-  bool connected = peripheral->connect(address);
-  if (connected)
-  {
-    Serial.printf("Connected to [%s]\n", peripheralUuid);
-  }
-  else
-  {
-    Serial.printf("Could not connect to [%s]\n", peripheralUuid);
-  }
-}
-
-/**
  * Set a callback for when a device is found
  */
 void BLEApi::onDeviceFound(BLEDeviceFound cb)
@@ -113,13 +109,112 @@ void BLEApi::onDeviceFound(BLEDeviceFound cb)
 }
 
 /**
+ * Connect to a device
+ * @param address device address
+ */
+bool BLEApi::connect(std::string id)
+{
+  BLEApi::stopScan();
+
+  // get MAC address from id
+  BLEAddress address = addressFromId(id);
+  // get MAC address type
+  BLEApiAddress a;
+  memcpy(a.address, address.getNative(), ESP_BD_ADDR_LEN);
+  esp_ble_addr_type_t addressType = addressTypes[a];
+
+  BLEClient *peripheral = BLEDevice::createClient();
+  bool connected = false;
+  int8_t retry = 5;
+  do
+  {
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    // Serial.println("Connect attempt start");
+    connected = peripheral->connect(address, addressType);
+    // Serial.println("Connect attempt ended");
+    retry--;
+  } while (!connected && retry > 0);
+  if (connected)
+  {
+    Serial.printf("Connected to [%s][%d]\n", address.toString().c_str(), retry);
+    connections[id] = peripheral;
+  }
+  else
+  {
+    Serial.printf("Could not connect to [%s][%d]\n", address.toString().c_str(), retry);
+  }
+  return connected;
+}
+
+std::map<std::string, BLERemoteService *> *BLEApi::discoverServices(std::string id)
+{
+  BLEClient *peripheral = connections[id];
+  if (peripheral)
+  {
+    if (!peripheral->isConnected())
+    {
+      return nullptr;
+    }
+    std::map<std::string, BLERemoteService *> *services;
+    services = peripheral->getServices();
+    return services;
+  }
+  return nullptr;
+}
+
+std::map<std::string, BLERemoteCharacteristic *> *BLEApi::discoverCharacteristics(std::string id, std::string service)
+{
+  BLEClient *peripheral = connections[id];
+  if (peripheral)
+  {
+    if (!peripheral->isConnected())
+    {
+      return nullptr;
+    }
+    BLERemoteService *remoteService = peripheral->getService(BLEUUID(service));
+    if (remoteService != nullptr)
+    {
+      std::map<std::string, BLERemoteCharacteristic *> *characteristics;
+      characteristics = remoteService->getCharacteristics();
+      return characteristics;
+    }
+  }
+  return nullptr;
+}
+
+std::string BLEApi::readCharacteristic(std::string id, std::string service, std::string characteristic)
+{
+  BLEClient *peripheral = connections[id];
+  if (peripheral)
+  {
+    if (!peripheral->isConnected())
+    {
+      return "";
+    }
+    BLERemoteService *remoteService = peripheral->getService(BLEUUID(service));
+    if (remoteService != nullptr)
+    {
+      BLERemoteCharacteristic *remoteCharacteristic = remoteService->getCharacteristic(BLEUUID(characteristic));
+      if (remoteCharacteristic->canRead())
+      {
+        return remoteCharacteristic->readValue();
+      }
+    }
+  }
+  return "";
+}
+
+/**
  * DO NOT USE: Proxy method for setting up the ESP32 BLEDevice callback
  */
 void BLEApi::_onDeviceFoundProxy(BLEAdvertisedDevice advertisedDevice)
 {
+  BLEApiAddress a;
+  memcpy(a.address, advertisedDevice.getAddress().getNative(), 6);
+  addressTypes[a] = advertisedDevice.getAddressType();
   if (_cbOnDeviceFound)
   {
-    _cbOnDeviceFound(advertisedDevice);
+    _cbOnDeviceFound(advertisedDevice, idFromAddress(advertisedDevice.getAddress()));
   }
 }
 
@@ -133,8 +228,32 @@ void BLEApi::onScanFinished(BLEScanResults results)
   }
   else
   {
+    meminfo();
     Serial.println("BLE Scan restarted");
     // Because of stupid callback
     bleScan->start(DEFAULT_SCAN_DURATION, BLEApi::onScanFinished, true);
   }
+}
+
+std::string BLEApi::idFromAddress(BLEAddress address)
+{
+  std::string peripheralUuid = address.toString();
+  // remove ':' from address
+  peripheralUuid.erase(14, 1);
+  peripheralUuid.erase(11, 1);
+  peripheralUuid.erase(8, 1);
+  peripheralUuid.erase(5, 1);
+  peripheralUuid.erase(2, 1);
+  return peripheralUuid;
+}
+
+BLEAddress BLEApi::addressFromId(std::string id)
+{
+  std::string addressStr = id;
+  addressStr.insert(2, ":");
+  addressStr.insert(5, ":");
+  addressStr.insert(8, ":");
+  addressStr.insert(11, ":");
+  addressStr.insert(14, ":");
+  return BLEAddress(addressStr);
 }

@@ -8,7 +8,12 @@
 
 #define DEFAULT_SCAN_DURATION 10
 
-typedef std::function<void(BLEAdvertisedDevice advertisedDevice)> BLEDeviceFound;
+typedef std::function<void(BLEAdvertisedDevice advertisedDevice, std::string id)> BLEDeviceFound;
+
+struct BLEApiAddress
+{
+  esp_bd_addr_t address;
+};
 
 class BLEApi
 {
@@ -17,8 +22,14 @@ public:
   static bool isReady();
   static bool startScan(uint32_t duration = 0);
   static bool stopScan();
-  static void connect(const char *peripheralUuid);
   static void onDeviceFound(BLEDeviceFound cb);
+  static bool connect(std::string id);
+  static std::map<std::string, BLERemoteService*> *discoverServices(std::string id);
+  static std::map<std::string, BLERemoteCharacteristic*> *discoverCharacteristics(std::string id, std::string service);
+  static std::string readCharacteristic(std::string id, std::string service, std::string characteristic);
+  static std::string idFromAddress(BLEAddress address);
+  static BLEAddress addressFromId(std::string id);
+
 
   static void _onDeviceFoundProxy(BLEAdvertisedDevice advertisedDevice);
 private:
@@ -27,6 +38,8 @@ private:
   static bool _scanMustStop;
   static BLEAdvertisedDeviceCallbacks *_advertisedDeviceCallback;
   static BLEScan *bleScan;
+  static std::map<BLEApiAddress, esp_ble_addr_type_t> addressTypes;
+  static std::map<std::string, BLEClient*> connections;
   static void onScanFinished(BLEScanResults results);
   static BLEDeviceFound _cbOnDeviceFound;
 };
