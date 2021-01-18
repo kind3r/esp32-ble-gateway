@@ -31,6 +31,4 @@ private:
   static BLEDeviceFound _cbOnDeviceFound;
 };
 
-
-
 #endif

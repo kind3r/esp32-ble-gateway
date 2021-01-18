@@ -9,12 +9,17 @@ WiFi to BLE gateway on ESP32 using noble websocket protocol
 
 ### Todo
 
-- Not happy with the way bleScan->setAdvertisedDeviceCallbacks is implemented
-- Make API class static
-- Move websocket creation to API's init
-- Device discovery to API
-- Service UUID filtering for scan and allow duplicates
-- Limit total number of websocket connections
+- Service UUID filtering for scan and allow/disallow duplicates
+- Limit total number of websocket connections (currently 4)
 - Timeout for non-authenticated connections
-- Initial wifi setup
-- Investigate unstable wifi (somtimes it connects but there is no traffic; try to ping gw during setup)
+- Initial wifi AP based setup
+- Web configuration for AES key and credentials
+- Investigate unstable wifi (sometimes it connects but there is no traffic; try to ping gw during setup)
+
+### Random thoughts
+
+- device discovery is always sent to all authenticated clients
+- give each device a unique ID (peripheralUuid) and store ID, address and address type in a Map as it is required for connection
+- conection is done based on peripheralUuid translated to address and type in the noble_api
+- always stop scanning before connecting to a device
+- only one client can connect to a device at a time so associate websocket with connection and cleanup on disconnect

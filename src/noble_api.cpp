@@ -4,6 +4,9 @@ Security *NobleApi::sec = nullptr;
 WebSocketsServer *NobleApi::ws = nullptr;
 std::map<uint32_t, std::string> *NobleApi::challenges = nullptr;
 
+/**
+   * Initialize API
+   */
 void NobleApi::init()
 {
   sec = new Security(aesKey);
@@ -15,6 +18,9 @@ void NobleApi::init()
   ws->onEvent(onWsEvent);
 }
 
+/**
+ * Loop to process websocket
+ */
 void NobleApi::loop()
 {
   ws->loop();

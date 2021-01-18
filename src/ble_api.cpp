@@ -16,6 +16,9 @@ class myAdvertisedDeviceCallback : public BLEAdvertisedDeviceCallbacks
   }
 };
 
+/**
+ * Initialize BLE API
+ */
 void BLEApi::init()
 {
   if (!_isReady)
@@ -26,17 +29,24 @@ void BLEApi::init()
     _advertisedDeviceCallback = new myAdvertisedDeviceCallback();
     bleScan->setAdvertisedDeviceCallbacks(BLEApi::_advertisedDeviceCallback);
     bleScan->setInterval(1250); // 1349
-    bleScan->setWindow(650); // 449
+    bleScan->setWindow(650);    // 449
     bleScan->setActiveScan(true);
     _isReady = true;
   }
 }
 
+/**
+ * If the API is ready
+ */
 bool BLEApi::isReady()
 {
   return _isReady;
 }
 
+/**
+ * Start scanning for BLE devices
+ * @param duration of the scan in seconds. If 0, it will keep scanning until stopped 
+ */
 bool BLEApi::startScan(uint32_t duration)
 {
   if (!_isReady || _isScanning)
@@ -58,6 +68,9 @@ bool BLEApi::startScan(uint32_t duration)
   return true;
 }
 
+/**
+ * Stop scanning for BLE devices
+ */
 bool BLEApi::stopScan()
 {
   if (_isReady && _isScanning)
@@ -72,23 +85,36 @@ bool BLEApi::stopScan()
   return false;
 }
 
-void BLEApi::connect(const char *peripheralUuid) {
+/**
+ * Connect to a device
+ */
+void BLEApi::connect(const char *peripheralUuid)
+{
   BLEApi::stopScan();
   BLEClient *peripheral = BLEDevice::createClient();
   BLEAddress address = BLEAddress(peripheralUuid);
   bool connected = peripheral->connect(address);
-  if (connected) {
+  if (connected)
+  {
     Serial.printf("Connected to [%s]\n", peripheralUuid);
-  } else {
+  }
+  else
+  {
     Serial.printf("Could not connect to [%s]\n", peripheralUuid);
   }
 }
 
+/**
+ * Set a callback for when a device is found
+ */
 void BLEApi::onDeviceFound(BLEDeviceFound cb)
 {
   _cbOnDeviceFound = cb;
 }
 
+/**
+ * DO NOT USE: Proxy method for setting up the ESP32 BLEDevice callback
+ */
 void BLEApi::_onDeviceFoundProxy(BLEAdvertisedDevice advertisedDevice)
 {
   if (_cbOnDeviceFound)
