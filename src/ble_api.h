@@ -24,6 +24,7 @@ public:
   static bool stopScan();
   static void onDeviceFound(BLEDeviceFound cb);
   static bool connect(std::string id);
+  static bool disconnect(std::string id);
   static std::map<std::string, BLERemoteService*> *discoverServices(std::string id);
   static std::map<std::string, BLERemoteCharacteristic*> *discoverCharacteristics(std::string id, std::string service);
   static std::string readCharacteristic(std::string id, std::string service, std::string characteristic);

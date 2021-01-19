@@ -10,6 +10,7 @@
 #include <WebSocketsServer.h>
 #include <ArduinoJson.h>
 #include <map>
+#include <set>
 #include "config.h"
 #include "security.h"
 #include "ble_api.h"
@@ -24,6 +25,11 @@ private:
   static Security *sec;
   static WebSocketsServer *ws;
   static std::map<uint32_t, std::string> challenges;
+  static std::map<std::string, uint8_t> peripheralConnections;
+
+  static void clientDisconnectCleanup(uint8_t client);
+  static bool clientCanConnect(uint8_t client, std::string peripheral);
+  static bool clientConnected(uint8_t client, std::string peripheral);
 
   static void initClient(uint8_t client);
   static void checkAuth(uint8_t client, const char *response);

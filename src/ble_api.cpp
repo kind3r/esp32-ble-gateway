@@ -146,6 +146,21 @@ bool BLEApi::connect(std::string id)
   return connected;
 }
 
+bool BLEApi::disconnect(std::string id)
+{
+  BLEClient *peripheral = connections[id];
+  if (peripheral)
+  {
+    if (peripheral->isConnected())
+    {
+      peripheral->disconnect();
+      connections.erase(id);
+      free(peripheral);
+    }
+  }
+  return true;
+}
+
 std::map<std::string, BLERemoteService *> *BLEApi::discoverServices(std::string id)
 {
   BLEClient *peripheral = connections[id];
