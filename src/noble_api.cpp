@@ -161,10 +161,6 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
             // check if peripheralUuid is not asigned to another client, asign client to periperhalUuid, check connection
             if (clientCanConnect(client, peripheralUuid))
             {
-              sendDisconnected(client, peripheralUuid);
-            }
-            else
-            {
               peripheralConnections[peripheralUuid] = client;
               // TODO: check if re-connection to peripheral is ok (in case client sends multiple connect but no disconnect)
               bool connected = BLEApi::connect(peripheralUuid);
@@ -175,8 +171,12 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
               else
               {
                 peripheralConnections.erase(peripheralUuid);
-                sendDisconnected(client, peripheralUuid);
+                sendDisconnected(client, peripheralUuid, "failed");
               }
+            }
+            else
+            {
+              sendDisconnected(client, peripheralUuid, "denied");
             }
           }
           else if (strcmp(action, "discoverServices") == 0)
@@ -192,7 +192,7 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
             }
             else
             {
-              sendDisconnected(client, peripheralUuid);
+              sendDisconnected(client, peripheralUuid, "not connected");
             }
           }
           else if (strcmp(action, "discoverCharacteristics") == 0)
@@ -209,12 +209,12 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
               else
               {
                 peripheralConnections.erase(peripheralUuid);
-                sendDisconnected(client, peripheralUuid);
+                sendDisconnected(client, peripheralUuid, "aborted");
               }
             }
             else
             {
-              sendDisconnected(client, peripheralUuid);
+              sendDisconnected(client, peripheralUuid, "not connected");
             }
           }
           else if (strcmp(action, "read") == 0)
@@ -229,7 +229,7 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
             }
             else
             {
-              sendDisconnected(client, peripheralUuid);
+              sendDisconnected(client, peripheralUuid, "not connected");
             }
           }
         }
@@ -404,9 +404,18 @@ void NobleApi::sendConnected(const uint8_t client, std::string id)
 
 void NobleApi::sendDisconnected(const uint8_t client, std::string id)
 {
+  sendDisconnected(client, id, "");
+}
+
+void NobleApi::sendDisconnected(const uint8_t client, std::string id, std::string reason)
+{
   StaticJsonDocument<128> command;
   command["type"] = "disconnect";
   command["peripheralUuid"] = id;
+  if (reason != "")
+  {
+    command["reason"] = reason;
+  }
   sendJsonMessage(command, client);
 }
 

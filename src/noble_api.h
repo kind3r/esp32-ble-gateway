@@ -39,6 +39,7 @@ private:
   static void sendState(const uint8_t client);
   static void sendConnected(const uint8_t client, std::string id);
   static void sendDisconnected(const uint8_t client, std::string id);
+  static void sendDisconnected(const uint8_t client, std::string id, std::string reason);
   static void sendServices(const uint8_t client, std::string id, std::map<std::string, BLERemoteService *> *services);
   static void sendCharacteristics(const uint8_t client, std::string id, std::string service, std::map<std::string, BLERemoteCharacteristic*> *characteristics);
   static void sendCharacteristicValue(const uint8_t client, std::string id, std::string service, std::string characteristic, std::string value);
