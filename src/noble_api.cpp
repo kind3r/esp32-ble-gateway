@@ -13,6 +13,7 @@ void NobleApi::init()
   sec = new Security(aesKey);
   BLEApi::init();
   BLEApi::onDeviceFound(onBLEDeviceFound);
+  BLEApi::onDeviceDisconnected(onBLEDeviceDisconnected);
   ws = new WebSocketsServer(ESP_GW_WEBSOCKET_PORT);
   ws->begin();
   ws->onEvent(onWsEvent);
@@ -287,6 +288,15 @@ void NobleApi::onBLEDeviceFound(BLEAdvertisedDevice advertisedDevice, std::strin
   command.clear();
 }
 
+void NobleApi::onBLEDeviceDisconnected(std::string peripheral) {
+  std::map<std::string, uint8_t>::iterator peripheralConnection = peripheralConnections.find(peripheral);
+  if (peripheralConnection != peripheralConnections.end())
+  {
+    sendDisconnected(peripheralConnection->second, peripheral, "device");
+    peripheralConnections.erase(peripheral);
+  }
+}
+
 void NobleApi::initClient(uint8_t client)
 {
   uint8_t iv[BLOCK_SIZE];
@@ -426,7 +436,7 @@ void NobleApi::sendDisconnected(const uint8_t client, std::string id, std::strin
 
 void NobleApi::sendServices(const uint8_t client, std::string id, std::map<std::string, BLERemoteService *> *services)
 {
-  StaticJsonDocument<128> command;
+  StaticJsonDocument<512> command;
   command["type"] = "servicesDiscover";
   command["peripheralUuid"] = id;
   JsonArray serviceUuids = command.createNestedArray("serviceUuids");

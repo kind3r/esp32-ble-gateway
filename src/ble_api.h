@@ -9,6 +9,7 @@
 #define DEFAULT_SCAN_DURATION 10
 
 typedef std::function<void(BLEAdvertisedDevice advertisedDevice, std::string id)> BLEDeviceFound;
+typedef std::function<void(std::string id)> BLEDeviceEvent;
 
 class BLEApi
 {
@@ -18,6 +19,8 @@ public:
   static bool startScan(uint32_t duration = 0);
   static bool stopScan();
   static void onDeviceFound(BLEDeviceFound cb);
+  static void onDeviceConnected(BLEDeviceEvent cb);
+  static void onDeviceDisconnected(BLEDeviceEvent cb);
   static bool connect(std::string id);
   static bool disconnect(std::string id);
   static std::map<std::string, BLERemoteService*> *discoverServices(std::string id);
@@ -28,16 +31,20 @@ public:
 
 
   static void _onDeviceFoundProxy(BLEAdvertisedDevice advertisedDevice);
+  static void _onDeviceInteractionProxy(std::string id, bool connected);
 private:
   static bool _isReady;
   static bool _isScanning;
   static bool _scanMustStop;
   static BLEAdvertisedDeviceCallbacks *_advertisedDeviceCallback;
+  static BLEClientCallbacks *_clientCallback;
   static BLEScan *bleScan;
   static std::map<std::string, esp_ble_addr_type_t> addressTypes;
   static std::map<std::string, BLEClient*> connections;
   static void onScanFinished(BLEScanResults results);
   static BLEDeviceFound _cbOnDeviceFound;
+  static BLEDeviceEvent _cbOnDeviceConnected;
+  static BLEDeviceEvent _cbOnDeviceDisconnected;
 };
 
 #endif

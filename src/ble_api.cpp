@@ -7,16 +7,39 @@ bool BLEApi::_isScanning = false;
 bool BLEApi::_scanMustStop = false;
 BLEScan *BLEApi::bleScan = nullptr;
 BLEDeviceFound BLEApi::_cbOnDeviceFound = nullptr;
+BLEDeviceEvent BLEApi::_cbOnDeviceConnected = nullptr;
+BLEDeviceEvent BLEApi::_cbOnDeviceDisconnected = nullptr;
 BLEAdvertisedDeviceCallbacks *BLEApi::_advertisedDeviceCallback = nullptr;
+BLEClientCallbacks *BLEApi::_clientCallback = nullptr;
 std::map<std::string, esp_ble_addr_type_t> BLEApi::addressTypes;
 std::map<std::string, BLEClient *> BLEApi::connections;
 
-class myAdvertisedDeviceCallback : public BLEAdvertisedDeviceCallbacks
+class myAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
 {
   void onResult(BLEAdvertisedDevice advertisedDevice)
   {
     BLEApi::_onDeviceFoundProxy(advertisedDevice);
   }
+};
+
+class myClientCallbacks : public BLEClientCallbacks
+{
+public:
+  void onConnect(BLEClient *pClient)
+  {
+    std::string id = BLEApi::idFromAddress(pClient->getPeerAddress());
+    Serial.printf("***** Connected to ==%s==\n", id.c_str());
+    BLEApi::_onDeviceInteractionProxy(id, true);
+  }
+  void onDisconnect(BLEClient *pClient)
+  {
+    std::string id = BLEApi::idFromAddress(pClient->getPeerAddress());
+    Serial.printf("***** Disconnected from ==%s==\n", id.c_str());
+    BLEApi::_onDeviceInteractionProxy(id, false);
+  }
+
+private:
+  std::string peripheralUuid;
 };
 
 /**
@@ -29,11 +52,12 @@ void BLEApi::init()
     esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
     BLEDevice::init("ESP32BLEGW");
     bleScan = BLEDevice::getScan();
-    _advertisedDeviceCallback = new myAdvertisedDeviceCallback();
+    _advertisedDeviceCallback = new myAdvertisedDeviceCallbacks();
     bleScan->setAdvertisedDeviceCallbacks(BLEApi::_advertisedDeviceCallback);
     bleScan->setInterval(1250); // 1349
     bleScan->setWindow(650);    // 449
     bleScan->setActiveScan(true);
+    _clientCallback = new myClientCallbacks();
     _isReady = true;
   }
 }
@@ -97,6 +121,16 @@ void BLEApi::onDeviceFound(BLEDeviceFound cb)
   _cbOnDeviceFound = cb;
 }
 
+void BLEApi::onDeviceConnected(BLEDeviceEvent cb)
+{
+  _cbOnDeviceConnected = cb;
+}
+
+void BLEApi::onDeviceDisconnected(BLEDeviceEvent cb)
+{
+  _cbOnDeviceDisconnected = cb;
+}
+
 /**
  * Connect to a device
  * @param address device address
@@ -117,12 +151,14 @@ bool BLEApi::connect(std::string id)
   do
   {
     peripheral = BLEDevice::createClient();
+    peripheral->setClientCallbacks(_clientCallback);
     connected = peripheral->connect(address, addressType);
     // Serial.println("Connect attempt ended");
     if (!connected)
     {
       delete peripheral;
-      if (retry > 0) {
+      if (retry > 0)
+      {
         peripheral = BLEDevice::createClient();
         Serial.println("Retry connection in 1s");
         vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -145,15 +181,15 @@ bool BLEApi::connect(std::string id)
 bool BLEApi::disconnect(std::string id)
 {
   BLEClient *peripheral = connections[id];
-  if (peripheral)
+  if (peripheral != nullptr)
   {
     if (peripheral->isConnected())
     {
       meminfo();
       peripheral->disconnect();
       vTaskDelay(3000 / portTICK_PERIOD_MS);
-      connections.erase(id);
-      delete peripheral;
+      // connections.erase(id);
+      // delete peripheral;
       meminfo();
     }
   }
@@ -228,6 +264,35 @@ void BLEApi::_onDeviceFoundProxy(BLEAdvertisedDevice advertisedDevice)
   if (_cbOnDeviceFound)
   {
     _cbOnDeviceFound(advertisedDevice, idFromAddress(advertisedDevice.getAddress()));
+  }
+}
+
+/**
+ * DO NOT USE: Proxy method for setting up the ESP32 BLEDevice connect and disconnect events
+ */
+void BLEApi::_onDeviceInteractionProxy(std::string id, bool connected)
+{
+  if (connected)
+  {
+    Serial.println("***** Connect ACK");
+    if (_cbOnDeviceConnected != nullptr) {
+      _cbOnDeviceConnected(id);
+    }
+  }
+  else
+  {
+    Serial.println("***** Disconnect ACK");
+    BLEClient *peripheral = connections[id];
+    if (peripheral != nullptr)
+    {
+      vTaskDelay(5000 / portTICK_PERIOD_MS);
+      connections.erase(id);
+      Serial.println("Dealocating memory");
+      delete peripheral;
+    }
+    if (_cbOnDeviceDisconnected != nullptr) {
+      _cbOnDeviceDisconnected(id);
+    }
   }
 }
 
