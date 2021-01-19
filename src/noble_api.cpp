@@ -97,9 +97,11 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
     {
       BLEApi::stopScan();
     }
+    meminfo();
   }
   else if (type == WStype_CONNECTED)
   {
+    meminfo();
     IPAddress ip = ws->remoteIP(client);
     Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", client, ip[0], ip[1], ip[2], ip[3], payload);
     // Generate IV and send auth request
@@ -336,9 +338,11 @@ void NobleApi::sendJsonMessage(JsonDocument &command, const uint8_t client)
   // String buffer;
   serializeJson(command, buffer, messageLength);
   buffer[messageLength] = '\0';
+  command.clear();
   // ESP_LOG_BUFFER_HEXDUMP("Send", buffer, messageLength, esp_log_level_t::ESP_LOG_INFO);
   Serial.printf("[%u] sent Text: %s\n", client, buffer);
   ws->sendTXT(client, buffer);
+  command.clear();
 }
 
 void NobleApi::sendJsonMessage(JsonDocument &command)
@@ -347,6 +351,7 @@ void NobleApi::sendJsonMessage(JsonDocument &command)
   char buffer[messageLength];
   serializeJson(command, buffer, messageLength);
   buffer[messageLength] = '\0';
+  command.clear();
 
   std::map<uint32_t, std::string>::iterator it;
   for (uint8_t client = 0; client < WEBSOCKETS_SERVER_CLIENT_MAX; client++)
@@ -477,16 +482,6 @@ void NobleApi::sendCharacteristicValue(
     std::string id,
     std::string service,
     std::string characteristic,
-    std::string value)
-{
-  sendCharacteristicValue(client, id, service, characteristic, value, false);
-}
-
-void NobleApi::sendCharacteristicValue(
-    const uint8_t client,
-    std::string id,
-    std::string service,
-    std::string characteristic,
     std::string value,
     bool isNotification)
 {
@@ -499,11 +494,11 @@ void NobleApi::sendCharacteristicValue(
   {
     char hexValue[value.length() * 2 + 1];
     sec->toHex((uint8_t *)value.c_str(), value.length(), hexValue);
-    command["data"] = hexValue;
+    command["data"] = std::string(hexValue);
   }
   else
   {
-    command["data"] = "";
+    command["data"] = "00";
   }
   command["isNotification"] = isNotification;
   sendJsonMessage(command, client);

@@ -1,8 +1,6 @@
 #ifndef ESP_GW_NOBLE_API_H
 #define ESP_GW_NOBLE_API_H
 
-#define LOG_LOCAL_LEVEL 5
-
 #ifndef ESP_GW_WEBSOCKET_PORT
 #define ESP_GW_WEBSOCKET_PORT 80
 #endif
@@ -42,8 +40,7 @@ private:
   static void sendDisconnected(const uint8_t client, std::string id, std::string reason);
   static void sendServices(const uint8_t client, std::string id, std::map<std::string, BLERemoteService *> *services);
   static void sendCharacteristics(const uint8_t client, std::string id, std::string service, std::map<std::string, BLERemoteCharacteristic*> *characteristics);
-  static void sendCharacteristicValue(const uint8_t client, std::string id, std::string service, std::string characteristic, std::string value);
-  static void sendCharacteristicValue(const uint8_t client, std::string id, std::string service, std::string characteristic, std::string value, bool isNotification);
+  static void sendCharacteristicValue(const uint8_t client, std::string id, std::string service, std::string characteristic, std::string value, bool isNotification = false);
   static void onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t length);
   static void onBLEDeviceFound(BLEAdvertisedDevice advertisedDevice, std::string id);
 };

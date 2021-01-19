@@ -2,25 +2,13 @@
 #include <BLEDevice.h>
 #include <freertos/FreeRTOS.h>
 
-namespace std
-{
-  template <>
-  struct less<BLEApiAddress>
-  {
-    bool operator()(const BLEApiAddress &lhs, const BLEApiAddress &rhs) const
-    {
-      return lhs.address < rhs.address;
-    }
-  };
-} // namespace std
-
 bool BLEApi::_isReady = false;
 bool BLEApi::_isScanning = false;
 bool BLEApi::_scanMustStop = false;
 BLEScan *BLEApi::bleScan = nullptr;
 BLEDeviceFound BLEApi::_cbOnDeviceFound = nullptr;
 BLEAdvertisedDeviceCallbacks *BLEApi::_advertisedDeviceCallback = nullptr;
-std::map<BLEApiAddress, esp_ble_addr_type_t> BLEApi::addressTypes;
+std::map<std::string, esp_ble_addr_type_t> BLEApi::addressTypes;
 std::map<std::string, BLEClient *> BLEApi::connections;
 
 class myAdvertisedDeviceCallback : public BLEAdvertisedDeviceCallbacks
@@ -94,6 +82,7 @@ bool BLEApi::stopScan()
     bleScan->stop(); // this does not call the callback onScanFinished
     bleScan->clearResults();
     _isScanning = false;
+    vTaskDelay(100 / portTICK_PERIOD_MS);
     Serial.println("BLE Scan stopped on demand");
     return true;
   }
@@ -119,19 +108,26 @@ bool BLEApi::connect(std::string id)
   // get MAC address from id
   BLEAddress address = addressFromId(id);
   // get MAC address type
-  BLEApiAddress a;
-  memcpy(a.address, address.getNative(), ESP_BD_ADDR_LEN);
-  esp_ble_addr_type_t addressType = addressTypes[a];
+  esp_ble_addr_type_t addressType = addressTypes[id];
 
-  BLEClient *peripheral = BLEDevice::createClient();
+  BLEClient *peripheral;
   bool connected = false;
   int8_t retry = 5;
+  Serial.println("Connect attempt start");
   do
   {
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-    // Serial.println("Connect attempt start");
+    peripheral = BLEDevice::createClient();
     connected = peripheral->connect(address, addressType);
     // Serial.println("Connect attempt ended");
+    if (!connected)
+    {
+      delete peripheral;
+      if (retry > 0) {
+        peripheral = BLEDevice::createClient();
+        Serial.println("Retry connection in 1s");
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+      }
+    }
     retry--;
   } while (!connected && retry > 0);
   if (connected)
@@ -153,9 +149,12 @@ bool BLEApi::disconnect(std::string id)
   {
     if (peripheral->isConnected())
     {
+      meminfo();
       peripheral->disconnect();
+      vTaskDelay(3000 / portTICK_PERIOD_MS);
       connections.erase(id);
-      free(peripheral);
+      delete peripheral;
+      meminfo();
     }
   }
   return true;
@@ -189,9 +188,10 @@ std::map<std::string, BLERemoteCharacteristic *> *BLEApi::discoverCharacteristic
     BLERemoteService *remoteService = peripheral->getService(BLEUUID(service));
     if (remoteService != nullptr)
     {
-      std::map<std::string, BLERemoteCharacteristic *> *characteristics;
-      characteristics = remoteService->getCharacteristics();
-      return characteristics;
+      return remoteService->getCharacteristics();
+      // std::map<std::string, BLERemoteCharacteristic *> *characteristics;
+      // characteristics = remoteService->getCharacteristics();
+      // return characteristics;
     }
   }
   return nullptr;
@@ -224,9 +224,7 @@ std::string BLEApi::readCharacteristic(std::string id, std::string service, std:
  */
 void BLEApi::_onDeviceFoundProxy(BLEAdvertisedDevice advertisedDevice)
 {
-  BLEApiAddress a;
-  memcpy(a.address, advertisedDevice.getAddress().getNative(), 6);
-  addressTypes[a] = advertisedDevice.getAddressType();
+  addressTypes[idFromAddress(advertisedDevice.getAddress())] = advertisedDevice.getAddressType();
   if (_cbOnDeviceFound)
   {
     _cbOnDeviceFound(advertisedDevice, idFromAddress(advertisedDevice.getAddress()));

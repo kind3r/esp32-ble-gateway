@@ -10,11 +10,6 @@
 
 typedef std::function<void(BLEAdvertisedDevice advertisedDevice, std::string id)> BLEDeviceFound;
 
-struct BLEApiAddress
-{
-  esp_bd_addr_t address;
-};
-
 class BLEApi
 {
 public:
@@ -39,7 +34,7 @@ private:
   static bool _scanMustStop;
   static BLEAdvertisedDeviceCallbacks *_advertisedDeviceCallback;
   static BLEScan *bleScan;
-  static std::map<BLEApiAddress, esp_ble_addr_type_t> addressTypes;
+  static std::map<std::string, esp_ble_addr_type_t> addressTypes;
   static std::map<std::string, BLEClient*> connections;
   static void onScanFinished(BLEScanResults results);
   static BLEDeviceFound _cbOnDeviceFound;

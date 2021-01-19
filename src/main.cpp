@@ -31,8 +31,8 @@ bool setupWifi()
 
 void setup()
 {
-  Serial.begin(115200);
-  esp_log_level_set("*", ESP_LOG_INFO);
+  Serial.begin(921600);
+  esp_log_level_set("*", ESP_LOG_VERBOSE);
 
   do
   {
