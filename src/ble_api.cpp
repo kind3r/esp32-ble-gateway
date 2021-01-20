@@ -9,6 +9,7 @@ BLEScan *BLEApi::bleScan = nullptr;
 BLEDeviceFound BLEApi::_cbOnDeviceFound = nullptr;
 BLEDeviceEvent BLEApi::_cbOnDeviceConnected = nullptr;
 BLEDeviceEvent BLEApi::_cbOnDeviceDisconnected = nullptr;
+BLECharacteristicNotification BLEApi::_cbOnCharacteristicNotification = nullptr;
 BLEAdvertisedDeviceCallbacks *BLEApi::_advertisedDeviceCallback = nullptr;
 BLEClientCallbacks *BLEApi::_clientCallback = nullptr;
 std::map<std::string, esp_ble_addr_type_t> BLEApi::addressTypes;
@@ -53,7 +54,7 @@ void BLEApi::init()
     BLEDevice::init("ESP32BLEGW");
     bleScan = BLEDevice::getScan();
     _advertisedDeviceCallback = new myAdvertisedDeviceCallbacks();
-    bleScan->setAdvertisedDeviceCallbacks(BLEApi::_advertisedDeviceCallback);
+    bleScan->setAdvertisedDeviceCallbacks(_advertisedDeviceCallback);
     bleScan->setInterval(1250); // 1349
     bleScan->setWindow(650);    // 449
     bleScan->setActiveScan(true);
@@ -91,7 +92,7 @@ bool BLEApi::startScan(uint32_t duration)
     _scanMustStop = true;
   }
   Serial.println("BLE Scan started");
-  bleScan->start(duration, BLEApi::onScanFinished, true);
+  bleScan->start(duration, _onScanFinished, true);
   return true;
 }
 
@@ -129,6 +130,10 @@ void BLEApi::onDeviceConnected(BLEDeviceEvent cb)
 void BLEApi::onDeviceDisconnected(BLEDeviceEvent cb)
 {
   _cbOnDeviceDisconnected = cb;
+}
+
+void BLEApi::onCharacteristicNotification(BLECharacteristicNotification cb) {
+  _cbOnCharacteristicNotification = cb;
 }
 
 /**
@@ -187,10 +192,10 @@ bool BLEApi::disconnect(std::string id)
     {
       meminfo();
       peripheral->disconnect();
-      vTaskDelay(3000 / portTICK_PERIOD_MS);
+      // vTaskDelay(3000 / portTICK_PERIOD_MS);
       // connections.erase(id);
       // delete peripheral;
-      meminfo();
+      // meminfo();
     }
   }
   return true;
@@ -236,7 +241,7 @@ std::map<std::string, BLERemoteCharacteristic *> *BLEApi::discoverCharacteristic
 std::string BLEApi::readCharacteristic(std::string id, std::string service, std::string characteristic)
 {
   BLEClient *peripheral = connections[id];
-  if (peripheral)
+  if (peripheral != nullptr)
   {
     if (!peripheral->isConnected())
     {
@@ -255,6 +260,31 @@ std::string BLEApi::readCharacteristic(std::string id, std::string service, std:
   return "";
 }
 
+bool BLEApi::notifyCharacteristic(std::string id, std::string service, std::string characteristic, bool notify)
+{
+  BLEClient *peripheral = connections[id];
+  if (peripheral != nullptr)
+  {
+    if (peripheral->isConnected())
+    {
+      BLERemoteService *remoteService = peripheral->getService(BLEUUID(service));
+      if (remoteService != nullptr)
+      {
+        BLERemoteCharacteristic *remoteCharacteristic = remoteService->getCharacteristic(BLEUUID(characteristic));
+        if (remoteCharacteristic->canNotify())
+        {
+          if (notify) {
+            remoteCharacteristic->registerForNotify(_onCharacteristicNotification);
+          } else {
+            remoteCharacteristic->registerForNotify(nullptr);
+          }
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
 /**
  * DO NOT USE: Proxy method for setting up the ESP32 BLEDevice callback
  */
@@ -275,7 +305,8 @@ void BLEApi::_onDeviceInteractionProxy(std::string id, bool connected)
   if (connected)
   {
     Serial.println("***** Connect ACK");
-    if (_cbOnDeviceConnected != nullptr) {
+    if (_cbOnDeviceConnected != nullptr)
+    {
       _cbOnDeviceConnected(id);
     }
   }
@@ -289,14 +320,16 @@ void BLEApi::_onDeviceInteractionProxy(std::string id, bool connected)
       connections.erase(id);
       Serial.println("Dealocating memory");
       delete peripheral;
+      meminfo();
     }
-    if (_cbOnDeviceDisconnected != nullptr) {
+    if (_cbOnDeviceDisconnected != nullptr)
+    {
       _cbOnDeviceDisconnected(id);
     }
   }
 }
 
-void BLEApi::onScanFinished(BLEScanResults results)
+void BLEApi::_onScanFinished(BLEScanResults results)
 {
   if (_scanMustStop)
   {
@@ -309,7 +342,23 @@ void BLEApi::onScanFinished(BLEScanResults results)
     meminfo();
     Serial.println("BLE Scan restarted");
     // Because of stupid callback
-    bleScan->start(DEFAULT_SCAN_DURATION, BLEApi::onScanFinished, true);
+    bleScan->start(DEFAULT_SCAN_DURATION, _onScanFinished, true);
+  }
+}
+
+void BLEApi::_onCharacteristicNotification(BLERemoteCharacteristic *characteristic, uint8_t *data, size_t length, bool isNotify)
+{
+  if (_cbOnCharacteristicNotification != nullptr) {
+    // patch required, see https://github.com/espressif/arduino-esp32/issues/3367
+    BLERemoteService *service = characteristic->getRemoteService();
+    BLEClient *client = service->getClient();
+    std::string dataStr = std::string((char*)data, length);
+    _cbOnCharacteristicNotification(
+      idFromAddress(client->getPeerAddress()), 
+      service->getUUID().toString(),
+      characteristic->getUUID().toString(),
+      dataStr,
+      isNotify);
   }
 }
 

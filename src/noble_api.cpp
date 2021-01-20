@@ -14,6 +14,7 @@ void NobleApi::init()
   BLEApi::init();
   BLEApi::onDeviceFound(onBLEDeviceFound);
   BLEApi::onDeviceDisconnected(onBLEDeviceDisconnected);
+  BLEApi::onCharacteristicNotification(onCharacteristicNotification);
   ws = new WebSocketsServer(ESP_GW_WEBSOCKET_PORT);
   ws->begin();
   ws->onEvent(onWsEvent);
@@ -220,6 +221,12 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
             }
             else if (strcmp(action, "notify") == 0)
             {
+              std::string serviceUuid = command["serviceUuid"];
+              std::string characteristicUuid = command["characteristicUuid"];
+              bool notify = command["notify"];
+              // subscribe or unsubscribe
+              BLEApi::notifyCharacteristic(peripheralUuid, serviceUuid, characteristicUuid, notify);
+              sendCharacteristicNotification(client, peripheralUuid, serviceUuid, characteristicUuid, notify);
             }
           }
           else
@@ -279,13 +286,28 @@ void NobleApi::onBLEDeviceFound(BLEAdvertisedDevice advertisedDevice, std::strin
   command.clear();
 }
 
-void NobleApi::onBLEDeviceDisconnected(std::string peripheral)
+void NobleApi::onBLEDeviceDisconnected(std::string id)
 {
-  std::map<std::string, uint8_t>::iterator peripheralConnection = peripheralConnections.find(peripheral);
+  std::map<std::string, uint8_t>::iterator peripheralConnection = peripheralConnections.find(id);
   if (peripheralConnection != peripheralConnections.end())
   {
-    sendDisconnected(peripheralConnection->second, peripheral, "device");
-    peripheralConnections.erase(peripheral);
+    sendDisconnected(peripheralConnection->second, id, "device");
+    peripheralConnections.erase(id);
+  }
+}
+
+void NobleApi::onCharacteristicNotification(std::string id, std::string service, std::string characteristic, std::string data, bool isNotify)
+{
+  std::map<std::string, uint8_t>::iterator peripheralConnection = peripheralConnections.find(id);
+  if (peripheralConnection != peripheralConnections.end())
+  {
+    sendCharacteristicValue(
+        peripheralConnection->second,
+        id,
+        service,
+        characteristic,
+        data,
+        isNotify);
   }
 }
 
@@ -503,5 +525,21 @@ void NobleApi::sendCharacteristicValue(
     command["data"] = "00";
   }
   command["isNotification"] = isNotification;
+  sendJsonMessage(command, client);
+}
+
+void NobleApi::sendCharacteristicNotification(
+    const uint8_t client,
+    std::string id,
+    std::string service,
+    std::string characteristic,
+    bool state)
+{
+  StaticJsonDocument<256> command;
+  command["type"] = "notify";
+  command["peripheralUuid"] = id;
+  command["serviceUuid"] = service;
+  command["characteristicUuid"] = characteristic;
+  command["state"] = state;
   sendJsonMessage(command, client);
 }
