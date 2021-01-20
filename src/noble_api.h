@@ -42,6 +42,7 @@ private:
   static void sendCharacteristics(const uint8_t client, std::string id, std::string service, std::map<std::string, BLERemoteCharacteristic *> *characteristics);
   static void sendCharacteristicValue(const uint8_t client, std::string id, std::string service, std::string characteristic, std::string value, bool isNotification = false);
   static void sendCharacteristicNotification(const uint8_t client, std::string id, std::string service, std::string characteristic, bool state);
+  static void sendCharacteristicWrite(const uint8_t client, std::string id, std::string service, std::string characteristic);
   static void onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t length);
   static void onBLEDeviceFound(BLEAdvertisedDevice advertisedDevice, std::string id);
   static void onBLEDeviceDisconnected(std::string peripheral);

@@ -132,7 +132,8 @@ void BLEApi::onDeviceDisconnected(BLEDeviceEvent cb)
   _cbOnDeviceDisconnected = cb;
 }
 
-void BLEApi::onCharacteristicNotification(BLECharacteristicNotification cb) {
+void BLEApi::onCharacteristicNotification(BLECharacteristicNotification cb)
+{
   _cbOnCharacteristicNotification = cb;
 }
 
@@ -273,9 +274,12 @@ bool BLEApi::notifyCharacteristic(std::string id, std::string service, std::stri
         BLERemoteCharacteristic *remoteCharacteristic = remoteService->getCharacteristic(BLEUUID(characteristic));
         if (remoteCharacteristic->canNotify())
         {
-          if (notify) {
+          if (notify)
+          {
             remoteCharacteristic->registerForNotify(_onCharacteristicNotification);
-          } else {
+          }
+          else
+          {
             remoteCharacteristic->registerForNotify(nullptr);
           }
           return true;
@@ -285,6 +289,29 @@ bool BLEApi::notifyCharacteristic(std::string id, std::string service, std::stri
   }
   return false;
 }
+
+bool BLEApi::writeCharacteristic(std::string id, std::string service, std::string characteristic, uint8_t *data, size_t length, bool withoutResponse)
+{
+  BLEClient *peripheral = connections[id];
+  if (peripheral != nullptr)
+  {
+    if (peripheral->isConnected())
+    {
+      BLERemoteService *remoteService = peripheral->getService(BLEUUID(service));
+      if (remoteService != nullptr)
+      {
+        BLERemoteCharacteristic *remoteCharacteristic = remoteService->getCharacteristic(BLEUUID(characteristic));
+        if (remoteCharacteristic->canWrite() || remoteCharacteristic->canWriteNoResponse())
+        {
+          remoteCharacteristic->writeValue(data, length, !withoutResponse);
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
 /**
  * DO NOT USE: Proxy method for setting up the ESP32 BLEDevice callback
  */
@@ -348,17 +375,18 @@ void BLEApi::_onScanFinished(BLEScanResults results)
 
 void BLEApi::_onCharacteristicNotification(BLERemoteCharacteristic *characteristic, uint8_t *data, size_t length, bool isNotify)
 {
-  if (_cbOnCharacteristicNotification != nullptr) {
+  if (_cbOnCharacteristicNotification != nullptr)
+  {
     // patch required, see https://github.com/espressif/arduino-esp32/issues/3367
     BLERemoteService *service = characteristic->getRemoteService();
     BLEClient *client = service->getClient();
-    std::string dataStr = std::string((char*)data, length);
+    std::string dataStr = std::string((char *)data, length);
     _cbOnCharacteristicNotification(
-      idFromAddress(client->getPeerAddress()), 
-      service->getUUID().toString(),
-      characteristic->getUUID().toString(),
-      dataStr,
-      isNotify);
+        idFromAddress(client->getPeerAddress()),
+        service->getUUID().toString(),
+        characteristic->getUUID().toString(),
+        dataStr,
+        isNotify);
   }
 }
 

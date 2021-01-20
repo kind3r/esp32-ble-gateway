@@ -32,9 +32,9 @@ public:
   static std::map<std::string, BLERemoteCharacteristic *> *discoverCharacteristics(std::string id, std::string service);
   static std::string readCharacteristic(std::string id, std::string service, std::string characteristic);
   static bool notifyCharacteristic(std::string id, std::string service, std::string characteristic, bool notify = true);
+  static bool writeCharacteristic(std::string id, std::string service, std::string characteristic, uint8_t *data, size_t length, bool withoutResponse = true);
   static std::string idFromAddress(BLEAddress address);
   static BLEAddress addressFromId(std::string id);
-
 
 private:
   friend class myAdvertisedDeviceCallbacks;

@@ -218,6 +218,21 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
             }
             else if (strcmp(action, "write") == 0)
             {
+              std::string serviceUuid = command["serviceUuid"];
+              std::string characteristicUuid = command["characteristicUuid"];
+              std::string dataHex = command["data"];
+              size_t length = dataHex.length() / 2;
+              uint8_t data[length];
+              sec->fromHex(dataHex.c_str(), length * 2, data);
+              bool withoutResponse = command["withoutResponse"];
+              if (BLEApi::writeCharacteristic(peripheralUuid, serviceUuid, characteristicUuid, data, length, withoutResponse))
+              { // success
+                sendCharacteristicWrite(client, peripheralUuid, serviceUuid, characteristicUuid);
+              }
+              else
+              { // failed
+                sendCharacteristicWrite(client, peripheralUuid, serviceUuid, characteristicUuid);
+              }
             }
             else if (strcmp(action, "notify") == 0)
             {
@@ -541,5 +556,15 @@ void NobleApi::sendCharacteristicNotification(
   command["serviceUuid"] = service;
   command["characteristicUuid"] = characteristic;
   command["state"] = state;
+  sendJsonMessage(command, client);
+}
+
+void NobleApi::sendCharacteristicWrite(const uint8_t client, std::string id, std::string service, std::string characteristic)
+{
+  StaticJsonDocument<256> command;
+  command["type"] = "write";
+  command["peripheralUuid"] = id;
+  command["serviceUuid"] = service;
+  command["characteristicUuid"] = characteristic;
   sendJsonMessage(command, client);
 }
