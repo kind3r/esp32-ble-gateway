@@ -59,6 +59,8 @@ void BLEApi::init()
     bleScan->setWindow(650);    // 449
     bleScan->setActiveScan(true);
     _clientCallback = new myClientCallbacks();
+    // TODO: maybe do some pre-descovery to get address types of devices around us 
+    // in case ESP was rebooted and clients try to connect before doing a scan
     _isReady = true;
   }
 }
@@ -158,6 +160,7 @@ bool BLEApi::connect(std::string id)
   {
     peripheral = BLEDevice::createClient();
     peripheral->setClientCallbacks(_clientCallback);
+    // TODO: sometimes the connect fails and remains hanging in the semaphore, patch BLE lib ?
     connected = peripheral->connect(address, addressType);
     // Serial.println("Connect attempt ended");
     if (!connected)
@@ -341,17 +344,17 @@ void BLEApi::_onDeviceInteractionProxy(std::string id, bool connected)
   {
     Serial.println("***** Disconnect ACK");
     BLEClient *peripheral = connections[id];
+    if (_cbOnDeviceDisconnected != nullptr)
+    {
+      _cbOnDeviceDisconnected(id);
+    }
     if (peripheral != nullptr)
     {
-      vTaskDelay(5000 / portTICK_PERIOD_MS);
+      // vTaskDelay(5000 / portTICK_PERIOD_MS);
       connections.erase(id);
       Serial.println("Dealocating memory");
       delete peripheral;
       meminfo();
-    }
-    if (_cbOnDeviceDisconnected != nullptr)
-    {
-      _cbOnDeviceDisconnected(id);
     }
   }
 }

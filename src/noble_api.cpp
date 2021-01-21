@@ -98,6 +98,8 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
     if (ws->connectedClients() == 0)
     {
       BLEApi::stopScan();
+      // just do a restart to cleanup everything for now
+      // ESP.restart();
     }
     meminfo();
   }
