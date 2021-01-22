@@ -16,6 +16,7 @@ void NobleApi::init()
   BLEApi::onDeviceDisconnected(onBLEDeviceDisconnected);
   BLEApi::onCharacteristicNotification(onCharacteristicNotification);
   ws = new WebSocketsServer(ESP_GW_WEBSOCKET_PORT);
+  ws->enableHeartbeat(10000, 2000, 1);
   ws->begin();
   ws->onEvent(onWsEvent);
 }
@@ -114,7 +115,7 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
   }
   else if (type == WStype_TEXT)
   {
-    Serial.printf("[%u] get  Text: %s\n", client, payload);
+    // Serial.printf("[%u] get  Text: %s\n", client, payload);
 
     StaticJsonDocument<1024> command;
     DeserializationError error = deserializeJson(command, payload, length);
@@ -255,6 +256,10 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
       command.clear();
     }
   }
+  else if (type == WStype_PONG)
+  {
+    // do nothing
+  }
   else
   {
     Serial.printf("Type not implemented [%u]\n", type);
@@ -381,7 +386,7 @@ void NobleApi::sendJsonMessage(JsonDocument &command, const uint8_t client)
   buffer[messageLength] = '\0';
   command.clear();
   // ESP_LOG_BUFFER_HEXDUMP("Send", buffer, messageLength, esp_log_level_t::ESP_LOG_INFO);
-  Serial.printf("[%u] sent Text: %s\n", client, buffer);
+  // Serial.printf("[%u] sent Text: %s\n", client, buffer);
   ws->sendTXT(client, buffer);
   command.clear();
 }
@@ -404,7 +409,7 @@ void NobleApi::sendJsonMessage(JsonDocument &command)
       if (it == challenges.end())
       {
         // ESP_LOG_BUFFER_HEXDUMP("Send", buffer, messageLength, esp_log_level_t::ESP_LOG_INFO);
-        Serial.printf("[%u] sent Text: %s\n", client, buffer);
+        // Serial.printf("[%u] sent Text: %s\n", client, buffer);
         ws->sendTXT(client, buffer);
       }
     }
