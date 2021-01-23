@@ -3,13 +3,19 @@
 Security *NobleApi::sec = nullptr;
 WebSocketsServer *NobleApi::ws = nullptr;
 std::map<uint32_t, std::string> NobleApi::challenges;
-PeripheralClient NobleApi::peripheralConnections;
+// PeripheralClient NobleApi::peripheralConnections;
+PeripheralClient NobleApi::peripheralConnections[MAX_CLIENT_CONNECTIONS];
+uint8_t NobleApi::activeConnections = 0;
 
 /**
    * Initialize API
    */
 void NobleApi::init()
 {
+  for (auto i = 0; i < MAX_CLIENT_CONNECTIONS; i++)
+  {
+    peripheralConnections[i].client = INVALID_CLIENT;
+  }
   sec = new Security(aesKey);
   BLEApi::init();
   BLEApi::onDeviceFound(onBLEDeviceFound);
@@ -40,21 +46,12 @@ void NobleApi::loop()
 void NobleApi::clientDisconnectCleanup(uint8_t client)
 {
   // disconnect all assigned peripheralUuid
-  std::set<BLEPeripheralID> peripherals;
-  for (PeripheralClient::iterator peripheralConnection = peripheralConnections.begin(); peripheralConnection != peripheralConnections.end(); ++peripheralConnection)
+  for (auto i = 0; i < MAX_CLIENT_CONNECTIONS; i++)
   {
-    if (peripheralConnection->second == client)
+    if (peripheralConnections[i].client == client)
     {
-      BLEApi::disconnect(peripheralConnection->first);
-      peripherals.insert(peripheralConnection->first);
-    }
-  }
-
-  if (peripherals.size() > 0)
-  {
-    for (std::set<BLEPeripheralID>::iterator peripheral = peripherals.begin(); peripheral != peripherals.end(); ++peripheral)
-    {
-      peripheralConnections.erase(*peripheral);
+      BLEApi::disconnect(peripheralConnections[i].id);
+      delClient(peripheralConnections[i].id);
     }
   }
 
@@ -66,8 +63,8 @@ void NobleApi::clientDisconnectCleanup(uint8_t client)
  */
 bool NobleApi::clientCanConnect(uint8_t client, BLEPeripheralID id)
 {
-  PeripheralClient::iterator peripheralConnection = peripheralConnections.find(id);
-  if (peripheralConnection != peripheralConnections.end() && peripheralConnection->second != client)
+  uint8_t connectedClient = getClient(id);
+  if (connectedClient != INVALID_CLIENT && connectedClient != client)
   {
     return false;
   }
@@ -79,8 +76,8 @@ bool NobleApi::clientCanConnect(uint8_t client, BLEPeripheralID id)
  */
 bool NobleApi::clientConnected(uint8_t client, BLEPeripheralID id)
 {
-  PeripheralClient::iterator peripheralConnection = peripheralConnections.find(id);
-  if (peripheralConnection != peripheralConnections.end() && peripheralConnection->second == client)
+  uint8_t connectedClient = getClient(id);
+  if (connectedClient == client)
   {
     return true;
   }
@@ -178,7 +175,7 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
                 // check if peripheralUuid is not asigned to another client, asign client to periperhalUuid, check connection
                 if (clientCanConnect(client, peripheralUuid))
                 {
-                  peripheralConnections[peripheralUuid] = client;
+                  addClient(peripheralUuid, client);
                   // TODO: check if re-connection to peripheral is ok (in case client sends multiple connect but no disconnect)
                   bool connected = BLEApi::connect(peripheralUuid);
                   if (connected)
@@ -187,7 +184,7 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
                   }
                   else
                   {
-                    peripheralConnections.erase(peripheralUuid);
+                    delClient(peripheralUuid);
                     sendDisconnected(client, peripheralUuid, "failed");
                   }
                 }
@@ -217,7 +214,7 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
                   }
                   else
                   {
-                    peripheralConnections.erase(peripheralUuid);
+                    delClient(peripheralUuid);
                     sendDisconnected(client, peripheralUuid, "aborted");
                   }
                 }
@@ -325,21 +322,21 @@ void NobleApi::onBLEDeviceFound(BLEAdvertisedDevice advertisedDevice, BLEPeriphe
 
 void NobleApi::onBLEDeviceDisconnected(BLEPeripheralID id)
 {
-  PeripheralClient::iterator peripheralConnection = peripheralConnections.find(id);
-  if (peripheralConnection != peripheralConnections.end())
+  uint8_t client = getClient(id);
+  if (client != INVALID_CLIENT)
   {
-    sendDisconnected(peripheralConnection->second, id, "device");
-    peripheralConnections.erase(id);
+    sendDisconnected(client, id);
+    delClient(id);
   }
 }
 
 void NobleApi::onCharacteristicNotification(BLEPeripheralID id, std::string service, std::string characteristic, std::string data, bool isNotify)
 {
-  PeripheralClient::iterator peripheralConnection = peripheralConnections.find(id);
-  if (peripheralConnection != peripheralConnections.end())
+  uint8_t client = getClient(id);
+  if (client != INVALID_CLIENT)
   {
     sendCharacteristicValue(
-        peripheralConnection->second,
+        client,
         id,
         service,
         characteristic,
@@ -589,4 +586,52 @@ void NobleApi::sendCharacteristicWrite(const uint8_t client, BLEPeripheralID id,
   command["serviceUuid"] = service;
   command["characteristicUuid"] = characteristic;
   sendJsonMessage(command, client);
+}
+
+bool NobleApi::addClient(BLEPeripheralID id, uint8_t client)
+{
+  if (activeConnections < MAX_CLIENT_CONNECTIONS)
+  {
+    for (auto i = 0; i < MAX_CLIENT_CONNECTIONS; i++)
+    {
+      if (peripheralConnections[i].client == INVALID_CLIENT)
+      {
+        peripheralConnections[i].client = client;
+        peripheralConnections[i].id = id;
+        activeConnections++;
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+uint8_t NobleApi::getClient(BLEPeripheralID id)
+{
+  if (activeConnections > 0)
+  {
+    for (auto i = 0; i < MAX_CLIENT_CONNECTIONS; i++)
+    {
+      if (peripheralConnections[i].id == id)
+      {
+        return peripheralConnections[i].client;
+      }
+    }
+  }
+  return INVALID_CLIENT;
+}
+
+void NobleApi::delClient(BLEPeripheralID id)
+{
+  if (activeConnections > 0)
+  {
+    for (auto i = 0; i < MAX_CLIENT_CONNECTIONS; i++)
+    {
+      if (peripheralConnections[i].id == id)
+      {
+        peripheralConnections[i].client = INVALID_CLIENT;
+        activeConnections--;
+      }
+    }
+  }
 }
