@@ -6,7 +6,13 @@
 #include <functional>
 #include "util.h"
 
+#ifndef DEFAULT_SCAN_DURATION
 #define DEFAULT_SCAN_DURATION 10
+#endif
+
+#ifndef MAX_CLIENT_CONNECTIONS
+#define MAX_CLIENT_CONNECTIONS 5
+#endif
 
 class myAdvertisedDeviceCallbacks;
 class myClientCallbacks;
@@ -15,6 +21,10 @@ typedef std::array<uint8_t, ESP_BD_ADDR_LEN> BLEPeripheralID;
 typedef std::function<void(BLEAdvertisedDevice advertisedDevice, BLEPeripheralID id)> BLEDeviceFound;
 typedef std::function<void(BLEPeripheralID id)> BLEDeviceEvent;
 typedef std::function<void(BLEPeripheralID id, std::string service, std::string characteristic, std::string data, bool isNotify)> BLECharacteristicNotification;
+struct BLEConnection {
+  BLEPeripheralID id;
+  BLEClient *device;
+};
 
 class BLEApi
 {
@@ -48,7 +58,6 @@ private:
   static BLEClientCallbacks *_clientCallback;
   static BLEScan *bleScan;
   static std::map<BLEPeripheralID, esp_ble_addr_type_t> addressTypes;
-  static std::map<BLEPeripheralID, BLEClient *> connections;
   static void _onScanFinished(BLEScanResults results);
   static void _onCharacteristicNotification(BLERemoteCharacteristic *characteristic, uint8_t *data, size_t length, bool isNotify);
   static void _onDeviceFoundProxy(BLEAdvertisedDevice advertisedDevice);
@@ -57,6 +66,11 @@ private:
   static BLEDeviceEvent _cbOnDeviceConnected;
   static BLEDeviceEvent _cbOnDeviceDisconnected;
   static BLECharacteristicNotification _cbOnCharacteristicNotification;
+  static BLEConnection connections[MAX_CLIENT_CONNECTIONS];
+  static uint8_t activeConnections;
+  static bool addConnection(BLEPeripheralID id, BLEClient *device);
+  static BLEClient *getConnection(BLEPeripheralID id);
+  static void delConnection(BLEPeripheralID id);
 };
 
 #endif
