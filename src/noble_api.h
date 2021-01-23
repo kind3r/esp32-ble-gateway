@@ -13,6 +13,8 @@
 #include "security.h"
 #include "ble_api.h"
 
+typedef std::map<BLEPeripheralID, uint8_t> PeripheralClient;
+
 class NobleApi
 {
 public:
@@ -23,11 +25,11 @@ private:
   static Security *sec;
   static WebSocketsServer *ws;
   static std::map<uint32_t, std::string> challenges;
-  static std::map<std::string, uint8_t> peripheralConnections;
+  static PeripheralClient peripheralConnections;
 
   static void clientDisconnectCleanup(uint8_t client);
-  static bool clientCanConnect(uint8_t client, std::string peripheral);
-  static bool clientConnected(uint8_t client, std::string peripheral);
+  static bool clientCanConnect(uint8_t client, BLEPeripheralID id);
+  static bool clientConnected(uint8_t client, BLEPeripheralID id);
 
   static void initClient(uint8_t client);
   static void checkAuth(uint8_t client, const char *response);
@@ -35,18 +37,18 @@ private:
   static void sendJsonMessage(JsonDocument &command);
   static void sendAuthMessage(const uint8_t client);
   static void sendState(const uint8_t client);
-  static void sendConnected(const uint8_t client, std::string id);
-  static void sendDisconnected(const uint8_t client, std::string id);
-  static void sendDisconnected(const uint8_t client, std::string id, std::string reason);
-  static void sendServices(const uint8_t client, std::string id, std::map<std::string, BLERemoteService *> *services);
-  static void sendCharacteristics(const uint8_t client, std::string id, std::string service, std::map<std::string, BLERemoteCharacteristic *> *characteristics);
-  static void sendCharacteristicValue(const uint8_t client, std::string id, std::string service, std::string characteristic, std::string value, bool isNotification = false);
-  static void sendCharacteristicNotification(const uint8_t client, std::string id, std::string service, std::string characteristic, bool state);
-  static void sendCharacteristicWrite(const uint8_t client, std::string id, std::string service, std::string characteristic);
+  static void sendConnected(const uint8_t client, BLEPeripheralID id);
+  static void sendDisconnected(const uint8_t client, BLEPeripheralID id);
+  static void sendDisconnected(const uint8_t client, BLEPeripheralID id, std::string reason);
+  static void sendServices(const uint8_t client, BLEPeripheralID id, std::map<std::string, BLERemoteService *> *services);
+  static void sendCharacteristics(const uint8_t client, BLEPeripheralID id, std::string service, std::map<std::string, BLERemoteCharacteristic *> *characteristics);
+  static void sendCharacteristicValue(const uint8_t client, BLEPeripheralID id, std::string service, std::string characteristic, std::string value, bool isNotification = false);
+  static void sendCharacteristicNotification(const uint8_t client, BLEPeripheralID id, std::string service, std::string characteristic, bool state);
+  static void sendCharacteristicWrite(const uint8_t client, BLEPeripheralID id, std::string service, std::string characteristic);
   static void onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t length);
-  static void onBLEDeviceFound(BLEAdvertisedDevice advertisedDevice, std::string id);
-  static void onBLEDeviceDisconnected(std::string peripheral);
-  static void onCharacteristicNotification(std::string id, std::string service, std::string characteristic, std::string data, bool isNotify);
+  static void onBLEDeviceFound(BLEAdvertisedDevice advertisedDevice, BLEPeripheralID id);
+  static void onBLEDeviceDisconnected(BLEPeripheralID id);
+  static void onCharacteristicNotification(BLEPeripheralID id, std::string service, std::string characteristic, std::string data, bool isNotify);
 };
 
 #endif

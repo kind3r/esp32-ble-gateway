@@ -12,8 +12,8 @@ BLEDeviceEvent BLEApi::_cbOnDeviceDisconnected = nullptr;
 BLECharacteristicNotification BLEApi::_cbOnCharacteristicNotification = nullptr;
 BLEAdvertisedDeviceCallbacks *BLEApi::_advertisedDeviceCallback = nullptr;
 BLEClientCallbacks *BLEApi::_clientCallback = nullptr;
-std::map<std::string, esp_ble_addr_type_t> BLEApi::addressTypes;
-std::map<std::string, BLEClient *> BLEApi::connections;
+std::map<BLEPeripheralID, esp_ble_addr_type_t> BLEApi::addressTypes;
+std::map<BLEPeripheralID, BLEClient *> BLEApi::connections;
 
 class myAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
 {
@@ -28,14 +28,14 @@ class myClientCallbacks : public BLEClientCallbacks
 public:
   void onConnect(BLEClient *pClient)
   {
-    std::string id = BLEApi::idFromAddress(pClient->getPeerAddress());
-    Serial.printf("***** Connected to ==%s==\n", id.c_str());
+    BLEPeripheralID id = BLEApi::idFromAddress(pClient->getPeerAddress());
+    Serial.printf("***** Connected to ==%s==\n", pClient->getPeerAddress().toString().c_str());
     BLEApi::_onDeviceInteractionProxy(id, true);
   }
   void onDisconnect(BLEClient *pClient)
   {
-    std::string id = BLEApi::idFromAddress(pClient->getPeerAddress());
-    Serial.printf("***** Disconnected from ==%s==\n", id.c_str());
+    BLEPeripheralID id = BLEApi::idFromAddress(pClient->getPeerAddress());
+    Serial.printf("***** Disconnected from ==%s==\n", pClient->getPeerAddress().toString().c_str());
     BLEApi::_onDeviceInteractionProxy(id, false);
   }
 
@@ -143,7 +143,7 @@ void BLEApi::onCharacteristicNotification(BLECharacteristicNotification cb)
  * Connect to a device
  * @param address device address
  */
-bool BLEApi::connect(std::string id)
+bool BLEApi::connect(BLEPeripheralID id)
 {
   BLEApi::stopScan();
 
@@ -187,7 +187,7 @@ bool BLEApi::connect(std::string id)
   return connected;
 }
 
-bool BLEApi::disconnect(std::string id)
+bool BLEApi::disconnect(BLEPeripheralID id)
 {
   BLEClient *peripheral = connections[id];
   if (peripheral != nullptr)
@@ -205,7 +205,7 @@ bool BLEApi::disconnect(std::string id)
   return true;
 }
 
-std::map<std::string, BLERemoteService *> *BLEApi::discoverServices(std::string id)
+std::map<std::string, BLERemoteService *> *BLEApi::discoverServices(BLEPeripheralID id)
 {
   BLEClient *peripheral = connections[id];
   if (peripheral)
@@ -221,7 +221,7 @@ std::map<std::string, BLERemoteService *> *BLEApi::discoverServices(std::string 
   return nullptr;
 }
 
-std::map<std::string, BLERemoteCharacteristic *> *BLEApi::discoverCharacteristics(std::string id, std::string service)
+std::map<std::string, BLERemoteCharacteristic *> *BLEApi::discoverCharacteristics(BLEPeripheralID id, std::string service)
 {
   BLEClient *peripheral = connections[id];
   if (peripheral)
@@ -242,7 +242,7 @@ std::map<std::string, BLERemoteCharacteristic *> *BLEApi::discoverCharacteristic
   return nullptr;
 }
 
-std::string BLEApi::readCharacteristic(std::string id, std::string service, std::string characteristic)
+std::string BLEApi::readCharacteristic(BLEPeripheralID id, std::string service, std::string characteristic)
 {
   BLEClient *peripheral = connections[id];
   if (peripheral != nullptr)
@@ -264,7 +264,7 @@ std::string BLEApi::readCharacteristic(std::string id, std::string service, std:
   return "";
 }
 
-bool BLEApi::notifyCharacteristic(std::string id, std::string service, std::string characteristic, bool notify)
+bool BLEApi::notifyCharacteristic(BLEPeripheralID id, std::string service, std::string characteristic, bool notify)
 {
   BLEClient *peripheral = connections[id];
   if (peripheral != nullptr)
@@ -293,7 +293,7 @@ bool BLEApi::notifyCharacteristic(std::string id, std::string service, std::stri
   return false;
 }
 
-bool BLEApi::writeCharacteristic(std::string id, std::string service, std::string characteristic, uint8_t *data, size_t length, bool withoutResponse)
+bool BLEApi::writeCharacteristic(BLEPeripheralID id, std::string service, std::string characteristic, uint8_t *data, size_t length, bool withoutResponse)
 {
   BLEClient *peripheral = connections[id];
   if (peripheral != nullptr)
@@ -330,7 +330,7 @@ void BLEApi::_onDeviceFoundProxy(BLEAdvertisedDevice advertisedDevice)
 /**
  * DO NOT USE: Proxy method for setting up the ESP32 BLEDevice connect and disconnect events
  */
-void BLEApi::_onDeviceInteractionProxy(std::string id, bool connected)
+void BLEApi::_onDeviceInteractionProxy(BLEPeripheralID id, bool connected)
 {
   if (connected)
   {
@@ -393,25 +393,23 @@ void BLEApi::_onCharacteristicNotification(BLERemoteCharacteristic *characterist
   }
 }
 
-std::string BLEApi::idFromAddress(BLEAddress address)
+BLEPeripheralID BLEApi::idFromAddress(BLEAddress address)
 {
-  std::string peripheralUuid = address.toString();
-  // remove ':' from address
-  peripheralUuid.erase(14, 1);
-  peripheralUuid.erase(11, 1);
-  peripheralUuid.erase(8, 1);
-  peripheralUuid.erase(5, 1);
-  peripheralUuid.erase(2, 1);
+  BLEPeripheralID peripheralUuid;
+  memcpy(peripheralUuid.data(), address.getNative(), ESP_BD_ADDR_LEN);
   return peripheralUuid;
 }
 
-BLEAddress BLEApi::addressFromId(std::string id)
+BLEAddress BLEApi::addressFromId(BLEPeripheralID id)
 {
-  std::string addressStr = id;
-  addressStr.insert(2, ":");
-  addressStr.insert(5, ":");
-  addressStr.insert(8, ":");
-  addressStr.insert(11, ":");
-  addressStr.insert(14, ":");
-  return BLEAddress(addressStr);
+  return BLEAddress(id.data());
+}
+
+std::string BLEApi::idToString(BLEPeripheralID id) {
+  auto size = ESP_BD_ADDR_LEN * 2 + 1;
+	char *res = (char*)malloc(size);
+	snprintf(res, size, "%02x%02x%02x%02x%02x%02x", id[0], id[1], id[2], id[3], id[4], id[5]);
+	std::string ret(res);
+	free(res);
+	return ret;
 }

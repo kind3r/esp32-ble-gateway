@@ -11,9 +11,10 @@
 class myAdvertisedDeviceCallbacks;
 class myClientCallbacks;
 
-typedef std::function<void(BLEAdvertisedDevice advertisedDevice, std::string id)> BLEDeviceFound;
-typedef std::function<void(std::string id)> BLEDeviceEvent;
-typedef std::function<void(std::string id, std::string service, std::string characteristic, std::string data, bool isNotify)> BLECharacteristicNotification;
+typedef std::array<uint8_t, ESP_BD_ADDR_LEN> BLEPeripheralID;
+typedef std::function<void(BLEAdvertisedDevice advertisedDevice, BLEPeripheralID id)> BLEDeviceFound;
+typedef std::function<void(BLEPeripheralID id)> BLEDeviceEvent;
+typedef std::function<void(BLEPeripheralID id, std::string service, std::string characteristic, std::string data, bool isNotify)> BLECharacteristicNotification;
 
 class BLEApi
 {
@@ -26,15 +27,16 @@ public:
   static void onDeviceConnected(BLEDeviceEvent cb);
   static void onDeviceDisconnected(BLEDeviceEvent cb);
   static void onCharacteristicNotification(BLECharacteristicNotification cb);
-  static bool connect(std::string id);
-  static bool disconnect(std::string id);
-  static std::map<std::string, BLERemoteService *> *discoverServices(std::string id);
-  static std::map<std::string, BLERemoteCharacteristic *> *discoverCharacteristics(std::string id, std::string service);
-  static std::string readCharacteristic(std::string id, std::string service, std::string characteristic);
-  static bool notifyCharacteristic(std::string id, std::string service, std::string characteristic, bool notify = true);
-  static bool writeCharacteristic(std::string id, std::string service, std::string characteristic, uint8_t *data, size_t length, bool withoutResponse = true);
-  static std::string idFromAddress(BLEAddress address);
-  static BLEAddress addressFromId(std::string id);
+  static bool connect(BLEPeripheralID);
+  static bool disconnect(BLEPeripheralID);
+  static std::map<std::string, BLERemoteService *> *discoverServices(BLEPeripheralID id);
+  static std::map<std::string, BLERemoteCharacteristic *> *discoverCharacteristics(BLEPeripheralID id, std::string service);
+  static std::string readCharacteristic(BLEPeripheralID id, std::string service, std::string characteristic);
+  static bool notifyCharacteristic(BLEPeripheralID id, std::string service, std::string characteristic, bool notify = true);
+  static bool writeCharacteristic(BLEPeripheralID id, std::string service, std::string characteristic, uint8_t *data, size_t length, bool withoutResponse = true);
+  static BLEPeripheralID idFromAddress(BLEAddress address);
+  static BLEAddress addressFromId(BLEPeripheralID id);
+  static std::string idToString(BLEPeripheralID id);
 
 private:
   friend class myAdvertisedDeviceCallbacks;
@@ -45,12 +47,12 @@ private:
   static BLEAdvertisedDeviceCallbacks *_advertisedDeviceCallback;
   static BLEClientCallbacks *_clientCallback;
   static BLEScan *bleScan;
-  static std::map<std::string, esp_ble_addr_type_t> addressTypes;
-  static std::map<std::string, BLEClient *> connections;
+  static std::map<BLEPeripheralID, esp_ble_addr_type_t> addressTypes;
+  static std::map<BLEPeripheralID, BLEClient *> connections;
   static void _onScanFinished(BLEScanResults results);
   static void _onCharacteristicNotification(BLERemoteCharacteristic *characteristic, uint8_t *data, size_t length, bool isNotify);
   static void _onDeviceFoundProxy(BLEAdvertisedDevice advertisedDevice);
-  static void _onDeviceInteractionProxy(std::string id, bool connected);
+  static void _onDeviceInteractionProxy(BLEPeripheralID id, bool connected);
   static BLEDeviceFound _cbOnDeviceFound;
   static BLEDeviceEvent _cbOnDeviceConnected;
   static BLEDeviceEvent _cbOnDeviceDisconnected;

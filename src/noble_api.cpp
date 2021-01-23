@@ -3,7 +3,7 @@
 Security *NobleApi::sec = nullptr;
 WebSocketsServer *NobleApi::ws = nullptr;
 std::map<uint32_t, std::string> NobleApi::challenges;
-std::map<std::string, uint8_t> NobleApi::peripheralConnections;
+PeripheralClient NobleApi::peripheralConnections;
 
 /**
    * Initialize API
@@ -40,8 +40,8 @@ void NobleApi::loop()
 void NobleApi::clientDisconnectCleanup(uint8_t client)
 {
   // disconnect all assigned peripheralUuid
-  std::set<std::string> peripherals;
-  for (std::map<std::string, uint8_t>::iterator peripheralConnection = peripheralConnections.begin(); peripheralConnection != peripheralConnections.end(); ++peripheralConnection)
+  std::set<BLEPeripheralID> peripherals;
+  for (PeripheralClient::iterator peripheralConnection = peripheralConnections.begin(); peripheralConnection != peripheralConnections.end(); ++peripheralConnection)
   {
     if (peripheralConnection->second == client)
     {
@@ -52,7 +52,7 @@ void NobleApi::clientDisconnectCleanup(uint8_t client)
 
   if (peripherals.size() > 0)
   {
-    for (std::set<std::string>::iterator peripheral = peripherals.begin(); peripheral != peripherals.end(); ++peripheral)
+    for (std::set<BLEPeripheralID>::iterator peripheral = peripherals.begin(); peripheral != peripherals.end(); ++peripheral)
     {
       peripheralConnections.erase(*peripheral);
     }
@@ -64,9 +64,9 @@ void NobleApi::clientDisconnectCleanup(uint8_t client)
 /**
  * Can the client connect to device ?
  */
-bool NobleApi::clientCanConnect(uint8_t client, std::string peripheral)
+bool NobleApi::clientCanConnect(uint8_t client, BLEPeripheralID id)
 {
-  std::map<std::string, uint8_t>::iterator peripheralConnection = peripheralConnections.find(peripheral);
+  PeripheralClient::iterator peripheralConnection = peripheralConnections.find(id);
   if (peripheralConnection != peripheralConnections.end() && peripheralConnection->second != client)
   {
     return false;
@@ -77,9 +77,9 @@ bool NobleApi::clientCanConnect(uint8_t client, std::string peripheral)
 /**
  * Is client connected to the device ?
  */
-bool NobleApi::clientConnected(uint8_t client, std::string peripheral)
+bool NobleApi::clientConnected(uint8_t client, BLEPeripheralID id)
 {
-  std::map<std::string, uint8_t>::iterator peripheralConnection = peripheralConnections.find(peripheral);
+  PeripheralClient::iterator peripheralConnection = peripheralConnections.find(id);
   if (peripheralConnection != peripheralConnections.end() && peripheralConnection->second == client)
   {
     return true;
@@ -151,7 +151,7 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
         else
         {
           // client is authenticated, allow other commands
-          std::string peripheralUuid = command["peripheralUuid"];
+
           // scan sfuff
           if (strcmp(action, "startScanning") == 0)
           {
@@ -163,93 +163,108 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
           {
             BLEApi::stopScan();
           }
-          // connection
-          else if (strcmp(action, "connect") == 0)
+          else
           {
-            // check if peripheralUuid is not asigned to another client, asign client to periperhalUuid, check connection
-            if (clientCanConnect(client, peripheralUuid))
+            // stuff that requires periperalUuid
+            const char *tempUuid = command["peripheralUuid"];
+            if (tempUuid != nullptr)
             {
-              peripheralConnections[peripheralUuid] = client;
-              // TODO: check if re-connection to peripheral is ok (in case client sends multiple connect but no disconnect)
-              bool connected = BLEApi::connect(peripheralUuid);
-              if (connected)
+              BLEPeripheralID peripheralUuid;
+              sec->fromHex(tempUuid, strlen(tempUuid), peripheralUuid.data());
+
+              // connection
+              if (strcmp(action, "connect") == 0)
               {
-                sendConnected(client, peripheralUuid);
+                // check if peripheralUuid is not asigned to another client, asign client to periperhalUuid, check connection
+                if (clientCanConnect(client, peripheralUuid))
+                {
+                  peripheralConnections[peripheralUuid] = client;
+                  // TODO: check if re-connection to peripheral is ok (in case client sends multiple connect but no disconnect)
+                  bool connected = BLEApi::connect(peripheralUuid);
+                  if (connected)
+                  {
+                    sendConnected(client, peripheralUuid);
+                  }
+                  else
+                  {
+                    peripheralConnections.erase(peripheralUuid);
+                    sendDisconnected(client, peripheralUuid, "failed");
+                  }
+                }
+                else
+                {
+                  sendDisconnected(client, peripheralUuid, "denied");
+                }
+              }
+              // actions that require a connection
+              else if (clientConnected(client, peripheralUuid))
+              {
+                if (strcmp(action, "discoverServices") == 0)
+                {
+                  std::map<std::string, BLERemoteService *> *services = BLEApi::discoverServices(peripheralUuid);
+                  if (services != nullptr)
+                  {
+                    sendServices(client, peripheralUuid, services);
+                  }
+                }
+                else if (strcmp(action, "discoverCharacteristics") == 0)
+                {
+                  std::string serviceUuid = command["serviceUuid"];
+                  std::map<std::string, BLERemoteCharacteristic *> *characteristics = BLEApi::discoverCharacteristics(peripheralUuid, serviceUuid);
+                  if (characteristics != nullptr)
+                  {
+                    sendCharacteristics(client, peripheralUuid, serviceUuid, characteristics);
+                  }
+                  else
+                  {
+                    peripheralConnections.erase(peripheralUuid);
+                    sendDisconnected(client, peripheralUuid, "aborted");
+                  }
+                }
+                else if (strcmp(action, "read") == 0)
+                {
+                  std::string serviceUuid = command["serviceUuid"];
+                  std::string characteristicUuid = command["characteristicUuid"];
+                  std::string value = BLEApi::readCharacteristic(peripheralUuid, serviceUuid, characteristicUuid);
+                  sendCharacteristicValue(client, peripheralUuid, serviceUuid, characteristicUuid, value);
+                }
+                else if (strcmp(action, "write") == 0)
+                {
+                  std::string serviceUuid = command["serviceUuid"];
+                  std::string characteristicUuid = command["characteristicUuid"];
+                  std::string dataHex = command["data"];
+                  size_t length = dataHex.length() / 2;
+                  uint8_t data[length];
+                  sec->fromHex(dataHex.c_str(), length * 2, data);
+                  bool withoutResponse = command["withoutResponse"];
+                  if (BLEApi::writeCharacteristic(peripheralUuid, serviceUuid, characteristicUuid, data, length, withoutResponse))
+                  { // success
+                    sendCharacteristicWrite(client, peripheralUuid, serviceUuid, characteristicUuid);
+                  }
+                  else
+                  { // failed
+                    sendCharacteristicWrite(client, peripheralUuid, serviceUuid, characteristicUuid);
+                  }
+                }
+                else if (strcmp(action, "notify") == 0)
+                {
+                  std::string serviceUuid = command["serviceUuid"];
+                  std::string characteristicUuid = command["characteristicUuid"];
+                  bool notify = command["notify"];
+                  // subscribe or unsubscribe
+                  BLEApi::notifyCharacteristic(peripheralUuid, serviceUuid, characteristicUuid, notify);
+                  sendCharacteristicNotification(client, peripheralUuid, serviceUuid, characteristicUuid, notify);
+                }
               }
               else
               {
-                peripheralConnections.erase(peripheralUuid);
-                sendDisconnected(client, peripheralUuid, "failed");
+                sendDisconnected(client, peripheralUuid, "not connected");
               }
             }
             else
             {
-              sendDisconnected(client, peripheralUuid, "denied");
+              // failed to read peripheralUuid
             }
-          }
-          // actions that require a connection
-          else if (clientConnected(client, peripheralUuid))
-          {
-            if (strcmp(action, "discoverServices") == 0)
-            {
-              std::map<std::string, BLERemoteService *> *services = BLEApi::discoverServices(peripheralUuid);
-              if (services != nullptr)
-              {
-                sendServices(client, peripheralUuid, services);
-              }
-            }
-            else if (strcmp(action, "discoverCharacteristics") == 0)
-            {
-              std::string serviceUuid = command["serviceUuid"];
-              std::map<std::string, BLERemoteCharacteristic *> *characteristics = BLEApi::discoverCharacteristics(peripheralUuid, serviceUuid);
-              if (characteristics != nullptr)
-              {
-                sendCharacteristics(client, peripheralUuid, serviceUuid, characteristics);
-              }
-              else
-              {
-                peripheralConnections.erase(peripheralUuid);
-                sendDisconnected(client, peripheralUuid, "aborted");
-              }
-            }
-            else if (strcmp(action, "read") == 0)
-            {
-              std::string serviceUuid = command["serviceUuid"];
-              std::string characteristicUuid = command["characteristicUuid"];
-              std::string value = BLEApi::readCharacteristic(peripheralUuid, serviceUuid, characteristicUuid);
-              sendCharacteristicValue(client, peripheralUuid, serviceUuid, characteristicUuid, value);
-            }
-            else if (strcmp(action, "write") == 0)
-            {
-              std::string serviceUuid = command["serviceUuid"];
-              std::string characteristicUuid = command["characteristicUuid"];
-              std::string dataHex = command["data"];
-              size_t length = dataHex.length() / 2;
-              uint8_t data[length];
-              sec->fromHex(dataHex.c_str(), length * 2, data);
-              bool withoutResponse = command["withoutResponse"];
-              if (BLEApi::writeCharacteristic(peripheralUuid, serviceUuid, characteristicUuid, data, length, withoutResponse))
-              { // success
-                sendCharacteristicWrite(client, peripheralUuid, serviceUuid, characteristicUuid);
-              }
-              else
-              { // failed
-                sendCharacteristicWrite(client, peripheralUuid, serviceUuid, characteristicUuid);
-              }
-            }
-            else if (strcmp(action, "notify") == 0)
-            {
-              std::string serviceUuid = command["serviceUuid"];
-              std::string characteristicUuid = command["characteristicUuid"];
-              bool notify = command["notify"];
-              // subscribe or unsubscribe
-              BLEApi::notifyCharacteristic(peripheralUuid, serviceUuid, characteristicUuid, notify);
-              sendCharacteristicNotification(client, peripheralUuid, serviceUuid, characteristicUuid, notify);
-            }
-          }
-          else
-          {
-            sendDisconnected(client, peripheralUuid, "not connected");
           }
         }
       }
@@ -266,11 +281,11 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
   }
 }
 
-void NobleApi::onBLEDeviceFound(BLEAdvertisedDevice advertisedDevice, std::string id)
+void NobleApi::onBLEDeviceFound(BLEAdvertisedDevice advertisedDevice, BLEPeripheralID id)
 {
   StaticJsonDocument<1024> command;
   command["type"] = "discover";
-  command["peripheralUuid"] = id;
+  command["peripheralUuid"] = BLEApi::idToString(id);
   command["address"] = advertisedDevice.getAddress().toString();
   if (advertisedDevice.getAddressType() == BLE_ADDR_TYPE_PUBLIC || advertisedDevice.getAddressType() == BLE_ADDR_TYPE_RPA_PUBLIC)
   {
@@ -308,9 +323,9 @@ void NobleApi::onBLEDeviceFound(BLEAdvertisedDevice advertisedDevice, std::strin
   command.clear();
 }
 
-void NobleApi::onBLEDeviceDisconnected(std::string id)
+void NobleApi::onBLEDeviceDisconnected(BLEPeripheralID id)
 {
-  std::map<std::string, uint8_t>::iterator peripheralConnection = peripheralConnections.find(id);
+  PeripheralClient::iterator peripheralConnection = peripheralConnections.find(id);
   if (peripheralConnection != peripheralConnections.end())
   {
     sendDisconnected(peripheralConnection->second, id, "device");
@@ -318,9 +333,9 @@ void NobleApi::onBLEDeviceDisconnected(std::string id)
   }
 }
 
-void NobleApi::onCharacteristicNotification(std::string id, std::string service, std::string characteristic, std::string data, bool isNotify)
+void NobleApi::onCharacteristicNotification(BLEPeripheralID id, std::string service, std::string characteristic, std::string data, bool isNotify)
 {
-  std::map<std::string, uint8_t>::iterator peripheralConnection = peripheralConnections.find(id);
+  PeripheralClient::iterator peripheralConnection = peripheralConnections.find(id);
   if (peripheralConnection != peripheralConnections.end())
   {
     sendCharacteristicValue(
@@ -445,24 +460,24 @@ void NobleApi::sendState(const uint8_t client)
   command.clear();
 }
 
-void NobleApi::sendConnected(const uint8_t client, std::string id)
+void NobleApi::sendConnected(const uint8_t client, BLEPeripheralID id)
 {
   StaticJsonDocument<128> command;
   command["type"] = "connect";
-  command["peripheralUuid"] = id;
+  command["peripheralUuid"] = BLEApi::idToString(id);
   sendJsonMessage(command, client);
 }
 
-void NobleApi::sendDisconnected(const uint8_t client, std::string id)
+void NobleApi::sendDisconnected(const uint8_t client, BLEPeripheralID id)
 {
   sendDisconnected(client, id, "");
 }
 
-void NobleApi::sendDisconnected(const uint8_t client, std::string id, std::string reason)
+void NobleApi::sendDisconnected(const uint8_t client, BLEPeripheralID id, std::string reason)
 {
   StaticJsonDocument<128> command;
   command["type"] = "disconnect";
-  command["peripheralUuid"] = id;
+  command["peripheralUuid"] = BLEApi::idToString(id);
   if (reason != "")
   {
     command["reason"] = reason;
@@ -470,11 +485,11 @@ void NobleApi::sendDisconnected(const uint8_t client, std::string id, std::strin
   sendJsonMessage(command, client);
 }
 
-void NobleApi::sendServices(const uint8_t client, std::string id, std::map<std::string, BLERemoteService *> *services)
+void NobleApi::sendServices(const uint8_t client, BLEPeripheralID id, std::map<std::string, BLERemoteService *> *services)
 {
   StaticJsonDocument<512> command;
   command["type"] = "servicesDiscover";
-  command["peripheralUuid"] = id;
+  command["peripheralUuid"] = BLEApi::idToString(id);
   JsonArray serviceUuids = command.createNestedArray("serviceUuids");
   for (std::map<std::string, BLERemoteService *>::iterator it = services->begin(); it != services->end(); ++it)
   {
@@ -483,11 +498,11 @@ void NobleApi::sendServices(const uint8_t client, std::string id, std::map<std::
   sendJsonMessage(command, client);
 }
 
-void NobleApi::sendCharacteristics(const uint8_t client, std::string id, std::string service, std::map<std::string, BLERemoteCharacteristic *> *characteristics)
+void NobleApi::sendCharacteristics(const uint8_t client, BLEPeripheralID id, std::string service, std::map<std::string, BLERemoteCharacteristic *> *characteristics)
 {
   StaticJsonDocument<512> command;
   command["type"] = "characteristicsDiscover";
-  command["peripheralUuid"] = id;
+  command["peripheralUuid"] = BLEApi::idToString(id);
   command["serviceUuid"] = service;
   JsonArray characteristicsUuids = command.createNestedArray("characteristics");
   for (std::map<std::string, BLERemoteCharacteristic *>::iterator it = characteristics->begin(); it != characteristics->end(); ++it)
@@ -525,7 +540,7 @@ void NobleApi::sendCharacteristics(const uint8_t client, std::string id, std::st
 
 void NobleApi::sendCharacteristicValue(
     const uint8_t client,
-    std::string id,
+    BLEPeripheralID id,
     std::string service,
     std::string characteristic,
     std::string value,
@@ -533,7 +548,7 @@ void NobleApi::sendCharacteristicValue(
 {
   StaticJsonDocument<384> command;
   command["type"] = "read";
-  command["peripheralUuid"] = id;
+  command["peripheralUuid"] = BLEApi::idToString(id);
   command["serviceUuid"] = service;
   command["characteristicUuid"] = characteristic;
   if (value.length() > 0)
@@ -552,25 +567,25 @@ void NobleApi::sendCharacteristicValue(
 
 void NobleApi::sendCharacteristicNotification(
     const uint8_t client,
-    std::string id,
+    BLEPeripheralID id,
     std::string service,
     std::string characteristic,
     bool state)
 {
   StaticJsonDocument<256> command;
   command["type"] = "notify";
-  command["peripheralUuid"] = id;
+  command["peripheralUuid"] = BLEApi::idToString(id);
   command["serviceUuid"] = service;
   command["characteristicUuid"] = characteristic;
   command["state"] = state;
   sendJsonMessage(command, client);
 }
 
-void NobleApi::sendCharacteristicWrite(const uint8_t client, std::string id, std::string service, std::string characteristic)
+void NobleApi::sendCharacteristicWrite(const uint8_t client, BLEPeripheralID id, std::string service, std::string characteristic)
 {
   StaticJsonDocument<256> command;
   command["type"] = "write";
-  command["peripheralUuid"] = id;
+  command["peripheralUuid"] = BLEApi::idToString(id);
   command["serviceUuid"] = service;
   command["characteristicUuid"] = characteristic;
   sendJsonMessage(command, client);
