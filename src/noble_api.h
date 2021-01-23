@@ -21,6 +21,8 @@ struct PeripheralClient {
   uint8_t client;
 };
 
+typedef uint8_t Challenge[BLOCK_SIZE];
+
 class NobleApi
 {
 public:
@@ -30,7 +32,8 @@ public:
 private:
   static Security *sec;
   static WebSocketsServer *ws;
-  static std::map<uint32_t, std::string> challenges;
+  // static std::map<uint32_t, std::string> challenges;
+  static Challenge challenges[WEBSOCKETS_SERVER_CLIENT_MAX];
 
   static void clientDisconnectCleanup(uint8_t client);
   static bool clientCanConnect(uint8_t client, BLEPeripheralID id);

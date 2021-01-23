@@ -59,7 +59,6 @@ If everything was done correctly you should not be able to use the addon using t
 
 - check if multiple connections to multiple devices are possible (`BLEDevice::createClient` seems to store only 1 `BLEClient`, but we could just create the client ourselfs)
 - Service UUID filtering for scan and allow/disallow duplicates
-- Limit total number of websocket connections (currently 4), make it configurable
 - Timeout for non-authenticated connections
 - Initial wifi AP based setup
 - Web configuration for AES key and credentials

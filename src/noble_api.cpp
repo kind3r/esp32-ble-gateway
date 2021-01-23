@@ -2,11 +2,29 @@
 
 Security *NobleApi::sec = nullptr;
 WebSocketsServer *NobleApi::ws = nullptr;
-std::map<uint32_t, std::string> NobleApi::challenges;
-// PeripheralClient NobleApi::peripheralConnections;
+Challenge NobleApi::challenges[WEBSOCKETS_SERVER_CLIENT_MAX];
 PeripheralClient NobleApi::peripheralConnections[MAX_CLIENT_CONNECTIONS];
 uint8_t NobleApi::activeConnections = 0;
 
+bool isEmptyChallenge(Challenge challenge)
+{
+  for (auto i = 0; i < BLOCK_SIZE; i++)
+  {
+    if (challenge[i] != 0x00)
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
+void clearChallenge(Challenge challenge)
+{
+  for (auto i = 0; i < BLOCK_SIZE; i++)
+  {
+    challenge[i] = 0x00;
+  }
+}
 /**
    * Initialize API
    */
@@ -15,6 +33,10 @@ void NobleApi::init()
   for (auto i = 0; i < MAX_CLIENT_CONNECTIONS; i++)
   {
     peripheralConnections[i].client = INVALID_CLIENT;
+  }
+  for (auto i = 0; i < WEBSOCKETS_SERVER_CLIENT_MAX; i++)
+  {
+    clearChallenge(challenges[i]);
   }
   sec = new Security(aesKey);
   BLEApi::init();
@@ -55,7 +77,7 @@ void NobleApi::clientDisconnectCleanup(uint8_t client)
     }
   }
 
-  challenges.erase(client);
+  clearChallenge(challenges[client]);
 }
 
 /**
@@ -129,7 +151,7 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
       if (action && strlen(action) > 0)
       {
         bool authenticated = false;
-        if (challenges.find(client) == challenges.end())
+        if (isEmptyChallenge(challenges[client]))
         {
           authenticated = true;
         }
@@ -347,11 +369,7 @@ void NobleApi::onCharacteristicNotification(BLEPeripheralID id, std::string serv
 
 void NobleApi::initClient(uint8_t client)
 {
-  uint8_t iv[BLOCK_SIZE];
-  sec->generateIV(iv);
-  char stringIV[BLOCK_SIZE * 2 + 1];
-  sec->toHex(iv, BLOCK_SIZE, stringIV);
-  challenges.insert({client, stringIV});
+  sec->generateIV((uint8_t *)challenges[client]);
 }
 
 void NobleApi::checkAuth(uint8_t client, const char *response)
@@ -360,22 +378,18 @@ void NobleApi::checkAuth(uint8_t client, const char *response)
   const size_t responseLength = strlen(response);
   if (responseLength % BLOCK_SIZE == 0)
   {
-    std::map<uint32_t, std::string>::iterator it = challenges.find(client);
-    if (it != challenges.end())
+    if (!isEmptyChallenge(challenges[client]))
     {
-      uint8_t iv[BLOCK_SIZE];
-      sec->fromHex(it->second.c_str(), it->second.length(), iv);
-
       uint8_t encryptedResponse[responseLength / 2];
       size_t encryptedResponseLength = sec->fromHex(response, responseLength, encryptedResponse);
 
       uint8_t decryptedResponse[encryptedResponseLength + 1];
-      size_t decryptedResponseLength = sec->decrypt(iv, encryptedResponse, encryptedResponseLength, decryptedResponse);
+      size_t decryptedResponseLength = sec->decrypt((uint8_t *)challenges[client], encryptedResponse, encryptedResponseLength, decryptedResponse);
       decryptedResponse[encryptedResponseLength] = '\0';
 
       if (strcmp((char *)decryptedResponse, "admin:admin") == 0)
       {
-        challenges.erase(client);
+        clearChallenge(challenges[client]);
         sendState(client);
       }
       else
@@ -417,8 +431,7 @@ void NobleApi::sendJsonMessage(JsonDocument &command)
     if (ws->clientIsConnected(client))
     {
       // only send to auth clients
-      it = challenges.find(client);
-      if (it == challenges.end())
+      if (isEmptyChallenge(challenges[client]))
       {
         // ESP_LOG_BUFFER_HEXDUMP("Send", buffer, messageLength, esp_log_level_t::ESP_LOG_INFO);
         // Serial.printf("[%u] sent Text: %s\n", client, buffer);
@@ -430,12 +443,13 @@ void NobleApi::sendJsonMessage(JsonDocument &command)
 
 void NobleApi::sendAuthMessage(const uint8_t client)
 {
-  std::map<uint32_t, std::string>::iterator it = challenges.find(client);
-  if (it != challenges.end())
+  if (!isEmptyChallenge(challenges[client]))
   {
     StaticJsonDocument<128> command;
     command["type"] = "auth";
-    command["challenge"] = it->second;
+    char challenge[BLOCK_SIZE * 2 + 1];
+    sec->toHex((uint8_t *)challenges[client], BLOCK_SIZE, challenge);
+    command["challenge"] = challenge;
     sendJsonMessage(command, client);
     command.clear();
   }
