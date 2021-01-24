@@ -60,7 +60,7 @@ void BLEApi::init()
     bleScan->setWindow(650);    // 449
     bleScan->setActiveScan(true);
     _clientCallback = new myClientCallbacks();
-    // TODO: maybe do some pre-descovery to get address types of devices around us 
+    // TODO: maybe do some pre-descovery to get address types of devices around us
     // in case ESP was rebooted and clients try to connect before doing a scan
     _isReady = true;
   }
@@ -146,6 +146,11 @@ void BLEApi::onCharacteristicNotification(BLECharacteristicNotification cb)
  */
 bool BLEApi::connect(BLEPeripheralID id)
 {
+  BLEClient *peripheral = getConnection(id);
+  if (peripheral != nullptr)
+  {
+    return true;
+  }
   BLEApi::stopScan();
 
   // get MAC address from id
@@ -153,14 +158,12 @@ bool BLEApi::connect(BLEPeripheralID id)
   // get MAC address type
   esp_ble_addr_type_t addressType = addressTypes[id];
 
-  BLEClient *peripheral;
   bool connected = false;
   int8_t retry = 5;
-  Serial.println("Connect attempt start");
+  log_i("Connect attempt start");
   do
   {
     peripheral = BLEDevice::createClient();
-    peripheral->setClientCallbacks(_clientCallback);
     // TODO: sometimes the connect fails and remains hanging in the semaphore, patch BLE lib ?
     // ----------------------------
     // Connect attempt start
@@ -171,24 +174,29 @@ bool BLEApi::connect(BLEPeripheralID id)
     connected = peripheral->connect(address, addressType);
     // Serial.println("Connect attempt ended");
     retry--;
-    if (!connected)
+    if (connected)
     {
+      peripheral->setClientCallbacks(_clientCallback);
+    }
+    else
+    {
+      log_d("Removing peripheral");
       delete peripheral;
       if (retry > 0)
       {
-        Serial.println("Retry connection in 1s");
+        log_i("Retry connection in 1s");
         vTaskDelay(1000 / portTICK_PERIOD_MS);
       }
     }
   } while (!connected && retry > 0);
   if (connected)
   {
-    Serial.printf("Connected to [%s][%d]\n", address.toString().c_str(), retry);
+    log_i("Connected to [%s][%d]\n", address.toString().c_str(), retry);
     addConnection(id, peripheral);
   }
   else
   {
-    Serial.printf("Could not connect to [%s][%d]\n", address.toString().c_str(), retry);
+    log_e("Could not connect to [%s][%d]\n", address.toString().c_str(), retry);
   }
   return connected;
 }
@@ -350,14 +358,15 @@ void BLEApi::_onDeviceInteractionProxy(BLEPeripheralID id, bool connected)
   {
     Serial.println("***** Disconnect ACK");
     BLEClient *peripheral = getConnection(id);
-    if (_cbOnDeviceDisconnected != nullptr)
-    {
-      _cbOnDeviceDisconnected(id);
-    }
     if (peripheral != nullptr)
     {
-      // vTaskDelay(5000 / portTICK_PERIOD_MS);
+      peripheral->setClientCallbacks(nullptr);
       delConnection(id);
+      if (_cbOnDeviceDisconnected != nullptr)
+      {
+        _cbOnDeviceDisconnected(id);
+      }
+      vTaskDelay(1000 / portTICK_PERIOD_MS);
       Serial.println("Dealocating memory");
       delete peripheral;
       meminfo();
@@ -399,10 +408,14 @@ void BLEApi::_onCharacteristicNotification(BLERemoteCharacteristic *characterist
   }
 }
 
-bool BLEApi::addConnection(BLEPeripheralID id, BLEClient *device) {
-  if (activeConnections < MAX_CLIENT_CONNECTIONS) {
-    for(auto i = 0; i < MAX_CLIENT_CONNECTIONS; i++) {
-      if (connections[i].device == nullptr) {
+bool BLEApi::addConnection(BLEPeripheralID id, BLEClient *device)
+{
+  if (activeConnections < MAX_CLIENT_CONNECTIONS)
+  {
+    for (auto i = 0; i < MAX_CLIENT_CONNECTIONS; i++)
+    {
+      if (connections[i].device == nullptr)
+      {
         connections[i].device = device;
         connections[i].id = id;
         activeConnections++;
@@ -413,10 +426,14 @@ bool BLEApi::addConnection(BLEPeripheralID id, BLEClient *device) {
   return false;
 }
 
-BLEClient *BLEApi::getConnection(BLEPeripheralID id) {
-  if (activeConnections > 0) {
-    for(auto i = 0; i < MAX_CLIENT_CONNECTIONS; i++) {
-      if (connections[i].id == id) {
+BLEClient *BLEApi::getConnection(BLEPeripheralID id)
+{
+  if (activeConnections > 0)
+  {
+    for (auto i = 0; i < MAX_CLIENT_CONNECTIONS; i++)
+    {
+      if (connections[i].id == id)
+      {
         return connections[i].device;
       }
     }
@@ -424,10 +441,14 @@ BLEClient *BLEApi::getConnection(BLEPeripheralID id) {
   return nullptr;
 }
 
-void BLEApi::delConnection(BLEPeripheralID id) {
-  if (activeConnections > 0) {
-    for(auto i = 0; i < MAX_CLIENT_CONNECTIONS; i++) {
-      if (connections[i].id == id) {
+void BLEApi::delConnection(BLEPeripheralID id)
+{
+  if (activeConnections > 0)
+  {
+    for (auto i = 0; i < MAX_CLIENT_CONNECTIONS; i++)
+    {
+      if (connections[i].id == id)
+      {
         connections[i].device = nullptr;
         activeConnections--;
       }
@@ -447,11 +468,12 @@ BLEAddress BLEApi::addressFromId(BLEPeripheralID id)
   return BLEAddress(id.data());
 }
 
-std::string BLEApi::idToString(BLEPeripheralID id) {
+std::string BLEApi::idToString(BLEPeripheralID id)
+{
   auto size = ESP_BD_ADDR_LEN * 2 + 1;
-	char *res = (char*)malloc(size);
-	snprintf(res, size, "%02x%02x%02x%02x%02x%02x", id[0], id[1], id[2], id[3], id[4], id[5]);
-	std::string ret(res);
-	free(res);
-	return ret;
+  char *res = (char *)malloc(size);
+  snprintf(res, size, "%02x%02x%02x%02x%02x%02x", id[0], id[1], id[2], id[3], id[4], id[5]);
+  std::string ret(res);
+  free(res);
+  return ret;
 }
