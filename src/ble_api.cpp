@@ -170,17 +170,16 @@ bool BLEApi::connect(BLEPeripheralID id)
     // ----------------------------
     connected = peripheral->connect(address, addressType);
     // Serial.println("Connect attempt ended");
+    retry--;
     if (!connected)
     {
       delete peripheral;
       if (retry > 0)
       {
-        peripheral = BLEDevice::createClient();
         Serial.println("Retry connection in 1s");
         vTaskDelay(1000 / portTICK_PERIOD_MS);
       }
     }
-    retry--;
   } while (!connected && retry > 0);
   if (connected)
   {
