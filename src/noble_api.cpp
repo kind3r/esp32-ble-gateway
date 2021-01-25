@@ -44,7 +44,7 @@ void NobleApi::init()
   BLEApi::onDeviceDisconnected(onBLEDeviceDisconnected);
   BLEApi::onCharacteristicNotification(onCharacteristicNotification);
   ws = new WebSocketsServer(ESP_GW_WEBSOCKET_PORT);
-  ws->enableHeartbeat(10000, 2000, 1);
+  ws->enableHeartbeat(30000, 5000, 3);
   ws->begin();
   ws->onEvent(onWsEvent);
 }

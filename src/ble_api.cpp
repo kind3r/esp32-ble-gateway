@@ -161,9 +161,9 @@ bool BLEApi::connect(BLEPeripheralID id)
   bool connected = false;
   int8_t retry = 5;
   log_i("Connect attempt start");
+  peripheral = BLEDevice::createClient();
   do
   {
-    peripheral = BLEDevice::createClient();
     // TODO: sometimes the connect fails and remains hanging in the semaphore, patch BLE lib ?
     // ----------------------------
     // Connect attempt start
@@ -180,8 +180,8 @@ bool BLEApi::connect(BLEPeripheralID id)
     }
     else
     {
-      log_d("Removing peripheral");
-      delete peripheral;
+      // log_d("Removing peripheral");
+      // delete peripheral;
       if (retry > 0)
       {
         log_i("Retry connection in 1s");
@@ -196,6 +196,8 @@ bool BLEApi::connect(BLEPeripheralID id)
   }
   else
   {
+    log_d("Removing peripheral");
+    delete peripheral;
     log_e("Could not connect to [%s][%d]\n", address.toString().c_str(), retry);
   }
   return connected;
