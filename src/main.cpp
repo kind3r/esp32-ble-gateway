@@ -7,10 +7,6 @@
 
 #include "noble_api.h"
 
-#include <esp_bt.h>
-#include <BLEDevice.h>
-#include "ble_api.h"
-
 #include "util.h"
 
 bool setupWifi()

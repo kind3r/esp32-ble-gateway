@@ -48,13 +48,13 @@ private:
   static void sendConnected(const uint8_t client, BLEPeripheralID id);
   static void sendDisconnected(const uint8_t client, BLEPeripheralID id);
   static void sendDisconnected(const uint8_t client, BLEPeripheralID id, std::string reason);
-  static void sendServices(const uint8_t client, BLEPeripheralID id, std::map<std::string, BLERemoteService *> *services);
-  static void sendCharacteristics(const uint8_t client, BLEPeripheralID id, std::string service, std::map<std::string, BLERemoteCharacteristic *> *characteristics);
+  static void sendServices(const uint8_t client, BLEPeripheralID id, std::vector<NimBLERemoteService *> *services);
+  static void sendCharacteristics(const uint8_t client, BLEPeripheralID id, std::string service, std::vector<NimBLERemoteCharacteristic *> *characteristics);
   static void sendCharacteristicValue(const uint8_t client, BLEPeripheralID id, std::string service, std::string characteristic, std::string value, bool isNotification = false);
   static void sendCharacteristicNotification(const uint8_t client, BLEPeripheralID id, std::string service, std::string characteristic, bool state);
   static void sendCharacteristicWrite(const uint8_t client, BLEPeripheralID id, std::string service, std::string characteristic);
   static void onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t length);
-  static void onBLEDeviceFound(BLEAdvertisedDevice advertisedDevice, BLEPeripheralID id);
+  static void onBLEDeviceFound(NimBLEAdvertisedDevice *advertisedDevice, BLEPeripheralID id);
   static void onBLEDeviceDisconnected(BLEPeripheralID id);
   static void onCharacteristicNotification(BLEPeripheralID id, std::string service, std::string characteristic, std::string data, bool isNotify);
 
