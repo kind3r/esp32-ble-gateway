@@ -188,8 +188,7 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
             const char *tempUuid = command["peripheralUuid"];
             if (tempUuid != nullptr)
             {
-              BLEPeripheralID peripheralUuid;
-              sec->fromHex(tempUuid, strlen(tempUuid), peripheralUuid.data());
+              BLEPeripheralID peripheralUuid = BLEApi::idFromString(tempUuid);
 
               // connection
               if (strcmp(action, "connect") == 0)
@@ -503,7 +502,7 @@ void NobleApi::sendServices(const uint8_t client, BLEPeripheralID id, std::vecto
   command["peripheralUuid"] = BLEApi::idToString(id);
   JsonArray serviceUuids = command.createNestedArray("serviceUuids");
   for (NimBLERemoteService *service : *services) {
-    serviceUuids.add(service->getUUID().toString());
+    serviceUuids.add(service->getUUID().to128().toString());
   }
   sendJsonMessage(command, client);
 }
@@ -517,7 +516,7 @@ void NobleApi::sendCharacteristics(const uint8_t client, BLEPeripheralID id, std
   JsonArray characteristicsUuids = command.createNestedArray("characteristics");
   for (NimBLERemoteCharacteristic *characteristic : *characteristics) {
     JsonObject charact = characteristicsUuids.createNestedObject();
-    charact["uuid"] = characteristic->getUUID().toString();
+    charact["uuid"] = characteristic->getUUID().to128().toString();
     JsonArray properties = charact.createNestedArray("properties");
     if (characteristic->canRead())
     {

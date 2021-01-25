@@ -1,7 +1,5 @@
 #include "ble_api.h"
-// #include <BLEDevice.h>
-// #include <NimBLEDevice.h>
-#include <freertos/FreeRTOS.h>
+// #include <freertos/FreeRTOS.h>
 
 bool BLEApi::_isReady = false;
 bool BLEApi::_isScanning = false;
@@ -156,13 +154,12 @@ bool BLEApi::connect(BLEPeripheralID id)
 
   // get MAC address from id
   NimBLEAddress address = addressFromId(id);
-  // get MAC address type
-  uint8_t addressType = addressTypes[id];
 
   bool connected = false;
   int8_t retry = 5;
   log_i("Connect attempt start");
   peripheral = NimBLEDevice::createClient();
+  peripheral->setConnectTimeout(10);
   do
   {
     // TODO: sometimes the connect fails and remains hanging in the semaphore, patch BLE lib ?
@@ -172,7 +169,7 @@ bool BLEApi::connect(BLEPeripheralID id)
     // [E][BLEClient.cpp:214] gattClientEventHandler(): Failed to connect, status=Unknown ESP_ERR error
     // Retry connection in 1s
     // ----------------------------
-    connected = peripheral->connect(address, addressType);
+    connected = peripheral->connect(address);
     // Serial.println("Connect attempt ended");
     retry--;
     if (connected)
@@ -231,7 +228,7 @@ std::vector<NimBLERemoteService *> *BLEApi::discoverServices(BLEPeripheralID id)
     {
       return nullptr;
     }
-    return peripheral->getServices();
+    return peripheral->getServices(true);
   }
   return nullptr;
 }
@@ -248,7 +245,7 @@ std::vector<NimBLERemoteCharacteristic *> *BLEApi::discoverCharacteristics(BLEPe
     NimBLERemoteService *remoteService = peripheral->getService(BLEUUID(service));
     if (remoteService != nullptr)
     {
-      return remoteService->getCharacteristics();
+      return remoteService->getCharacteristics(true);
       // std::map<std::string, BLERemoteCharacteristic *> *characteristics;
       // characteristics = remoteService->getCharacteristics();
       // return characteristics;
@@ -402,8 +399,8 @@ void BLEApi::_onCharacteristicNotification(NimBLERemoteCharacteristic *character
     std::string dataStr = std::string((char *)data, length);
     _cbOnCharacteristicNotification(
         idFromAddress(client->getPeerAddress()),
-        service->getUUID().toString(),
-        characteristic->getUUID().toString(),
+        service->getUUID().to128().toString(),
+        characteristic->getUUID().to128().toString(),
         dataStr,
         isNotify);
   }
@@ -466,15 +463,33 @@ BLEPeripheralID BLEApi::idFromAddress(NimBLEAddress address)
 
 BLEAddress BLEApi::addressFromId(BLEPeripheralID id)
 {
-  return NimBLEAddress(id.data());
+  // this is stupid
+  uint8_t address[6];
+  std::reverse_copy(id.data(), id.data() + sizeof address, address);
+  return NimBLEAddress(address, addressTypes[id]);
 }
 
 std::string BLEApi::idToString(BLEPeripheralID id)
 {
   auto size = ESP_BD_ADDR_LEN * 2 + 1;
   char *res = (char *)malloc(size);
-  snprintf(res, size, "%02x%02x%02x%02x%02x%02x", id[0], id[1], id[2], id[3], id[4], id[5]);
+  snprintf(res, size, "%02x%02x%02x%02x%02x%02x", id[5], id[4], id[3], id[2], id[1], id[0]);
   std::string ret(res);
   free(res);
   return ret;
+}
+
+BLEPeripheralID BLEApi::idFromString(const char *idStr)
+{
+  int data[6];
+  if (sscanf(idStr, "%2x%2x%2x%2x%2x%2x", &data[5], &data[4], &data[3], &data[2], &data[1], &data[0]) != 6)
+  {
+    log_e("Error parsing address");
+  }
+  BLEPeripheralID id;
+  for (size_t i = 0; i < ESP_BD_ADDR_LEN; i++)
+  {
+    id[i] = data[i];
+  }
+  return id;
 }

@@ -1,8 +1,10 @@
 #ifndef ESP_GW_BLE_API_H
 #define ESP_GW_BLE_API_H
 
+#define CONFIG_BT_NIMBLE_ROLE_PERIPHERAL_DISABLED
+#define CONFIG_BT_NIMBLE_ROLE_BROADCASTER_DISABLED
+
 #include <Arduino.h>
-// #include <BLEScan.h>
 #include <NimBLEDevice.h>
 #include <esp_bt_defs.h>
 #include <functional>
@@ -50,6 +52,7 @@ public:
   static BLEPeripheralID idFromAddress(NimBLEAddress address);
   static NimBLEAddress addressFromId(BLEPeripheralID id);
   static std::string idToString(BLEPeripheralID id);
+  static BLEPeripheralID idFromString(const char *idStr);
 
 private:
   friend class myAdvertisedDeviceCallbacks;
