@@ -4,12 +4,6 @@
 #define CONFIG_BT_NIMBLE_ROLE_PERIPHERAL_DISABLED
 #define CONFIG_BT_NIMBLE_ROLE_BROADCASTER_DISABLED
 
-#include <Arduino.h>
-#include <NimBLEDevice.h>
-#include <esp_bt_defs.h>
-#include <functional>
-#include "util.h"
-
 #ifndef DEFAULT_SCAN_DURATION
 #define DEFAULT_SCAN_DURATION 10
 #endif
@@ -17,6 +11,14 @@
 #ifndef MAX_CLIENT_CONNECTIONS
 #define MAX_CLIENT_CONNECTIONS 5
 #endif
+
+#define CONFIG_BT_NIMBLE_MAX_CONNECTIONS MAX_CLIENT_CONNECTIONS
+
+#include <Arduino.h>
+#include <NimBLEDevice.h>
+#include <esp_bt_defs.h>
+#include <functional>
+#include "util.h"
 
 class myAdvertisedDeviceCallbacks;
 class myClientCallbacks;
