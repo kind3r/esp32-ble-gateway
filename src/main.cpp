@@ -1,12 +1,11 @@
 #include <config.h>
-#include "Arduino.h"
-
+#include <Arduino.h>
 #include <WiFi.h>
-
+#include <ESPmDNS.h>
 #include <ArduinoJson.h>
 
+#include "web.h"
 #include "noble_api.h"
-
 #include "util.h"
 
 bool setupWifi()
@@ -25,17 +24,32 @@ bool setupWifi()
   return true;
 }
 
+bool setupWeb() {
+  return WebManager::init();
+}
+
 void setup()
 {
   Serial.begin(921600);
-  esp_log_level_set("*", ESP_LOG_VERBOSE);
+  // esp_log_level_set("*", ESP_LOG_VERBOSE);
 
   do
   {
     delay(200);
   } while (!setupWifi());
 
+  setupWeb();
+
+  bool mdnsSuccess = false;
+  do {
+    mdnsSuccess = MDNS.begin(gatewayName);
+  } while (mdnsSuccess == false);
+
+  MDNS.addService("http", "tcp", ESP_GW_WEBSERVER_PORT);
+
   NobleApi::init();
+
+  MDNS.addService("ws", "tcp", ESP_GW_WEBSOCKET_PORT);
 
   Serial.println("Setup complete");
   meminfo();
@@ -44,4 +58,5 @@ void setup()
 void loop()
 {
   NobleApi::loop();
+  WebManager::loop();
 }

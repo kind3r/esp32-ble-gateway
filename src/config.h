@@ -4,5 +4,6 @@
 extern const char *aesKey;
 extern const char *ssid;
 extern const char *password;
+extern const char *gatewayName;
 
 #endif
