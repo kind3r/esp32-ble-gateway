@@ -9,6 +9,7 @@
     "deploy": "npm run build && cp dist/index.html.gz ../data/index.html.gz"
   },
   "dependencies": {
+    "axios": "^0.21.1",
     "core-js": "^3.6.5",
     "vue": "^2.6.11"
   },

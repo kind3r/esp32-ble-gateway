@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <Preferences.h>
 #include <WiFi.h>
+#include <DNSServer.h>
 #include <ESPmDNS.h>
 #include <ArduinoJson.h>
 
@@ -9,7 +10,13 @@
 #include "noble_api.h"
 #include "util.h"
 
+#define WIFI_CONNECT_RETRY 5
+#define WIFI_CONFIGURE_DNS_PORT 53
+
 Preferences prefs;
+DNSServer *dnsServer = nullptr;
+bool configured = false;
+bool connected = false;
 
 bool setupWifi()
 {
@@ -19,17 +26,45 @@ bool setupWifi()
   //    - retry connection after a while if no new configuration provided (or restart ?)
   // - credentials not set, enter config mode
 
-  WiFi.mode(WIFI_STA);
+  // we have stored wifi credentials, use them
+  if (prefs.isKey("wifi_ssid") && prefs.isKey("wifi_pass")) {
+    configured = true;
+    size_t ssidLen = prefs.getBytesLength("wifi_ssid");
+    char ssid[ssidLen];
+    prefs.getBytes("wifi_ssid", ssid, ssidLen);
 
-  WiFi.begin(ssid, password);
-  if (WiFi.waitForConnectResult() != WL_CONNECTED)
-  {
-    Serial.printf("WiFi Failed!\n");
-    return false;
+    size_t passLen = prefs.getBytesLength("wifi_pass");
+    char pass[passLen];
+    prefs.getBytes("wifi_pass", pass, passLen);
+
+    WiFi.mode(WIFI_STA);
+
+    uint8_t wifiResult;
+    int8_t wifiRetry = WIFI_CONNECT_RETRY;
+    do {
+      wifiResult = WiFi.waitForConnectResult();
+      if (wifiRetry != WIFI_CONNECT_RETRY) {
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+      }
+      wifiRetry--;
+    } while (wifiResult != WL_CONNECTED && wifiRetry > 0);
+
+    if (wifiResult == WL_CONNECTED) {
+      Serial.print("IP Address: ");
+      Serial.println(WiFi.localIP());
+      connected = true;
+      return true;
+    }
   }
 
-  Serial.print("IP Address: ");
-  Serial.println(WiFi.localIP());
+  // no credentials or connect failed, setup AP
+  WiFi.softAP("ESP32GW", "87654321");
+  std::string dnsName = "";
+  dnsName += gatewayName;
+  dnsName += ".local";
+  dnsServer = new DNSServer();
+  dnsServer->start(WIFI_CONFIGURE_DNS_PORT, dnsName.c_str(), WiFi.softAPIP());
+
   return true;
 }
 
@@ -43,10 +78,7 @@ void setup()
   // esp_log_level_set("*", ESP_LOG_VERBOSE);
   prefs.begin("ESP32GW");
 
-  do
-  {
-    delay(200);
-  } while (!setupWifi());
+  setupWifi();
 
   setupWeb();
 
@@ -67,6 +99,10 @@ void setup()
 
 void loop()
 {
+  if (dnsServer != nullptr) {
+    // when in configuration mode handle DNS requests
+    dnsServer->processNextRequest();
+  }
   NobleApi::loop();
   WebManager::loop();
 }

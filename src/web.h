@@ -13,6 +13,7 @@
 #include "util.h"
 #include "security.h"
 #include <ArduinoJson.h>
+#include <WiFi.h>
 #include <HTTPSServer.hpp>
 #include <SSLCert.hpp>
 #include <HTTPRequest.hpp>

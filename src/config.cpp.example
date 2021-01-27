@@ -1,5 +1,3 @@
 #include "config.h"
 
-const char *ssid = "YOUR_WIFI_SSID";
-const char *password = "YOUR_WIFI_PASSWORD";
 const char *gatewayName = "NAME_YOUR_GATEWAY"; // it will respond to the NAME_YOUR_GATEWAY.local MDNS queries

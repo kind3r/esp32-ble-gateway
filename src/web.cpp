@@ -129,14 +129,33 @@ void WebManager::handleConfigGet(HTTPRequest * req, HTTPResponse * res) {
   res->setHeader("Content-Type", "application/json");
   res->setHeader("Connection", "close");
 
+  StaticJsonDocument<128> config;
+
+  size_t nameLen = prefs->getBytesLength("name");
+  char name[nameLen + 1];
+  prefs->getBytes("name", name, nameLen);
+  name[nameLen] = '\0';
+  config["name"] = name;
+
+  if (prefs->isKey("wifi_ssid")) {
+    size_t ssidLen = prefs->getBytesLength("wifi_ssid");
+    char ssid[ssidLen + 1];
+    prefs->getBytes("wifi_ssid", ssid, ssidLen);
+    ssid[ssidLen] = '\0';
+    config["wifi_ssid"] = ssid;
+  }
+
+  if (prefs->isKey("wifi_paass")) {
+    size_t passLen = prefs->getBytesLength("wifi_pass");
+    char pass[passLen + 1];
+    prefs->getBytes("wifi_pass", pass, passLen);
+    pass[passLen] = '\0';
+    config["wifi_pass"] = pass;
+  }
+
   char aesKey[BLOCK_SIZE * 2 + 1];
   prefs->getBytes("aes", aesKey, BLOCK_SIZE * 2);
   aesKey[BLOCK_SIZE * 2] = '\0';
-
-  StaticJsonDocument<128> config;
-  config["name"] = gatewayName;
-  config["wifi_ssid"] = ssid;
-  config["wifi_pass"] = password;
   config["aes_key"] = aesKey;
 
   size_t configLength = measureJson(config) + 1;
@@ -204,7 +223,9 @@ void WebManager::handleClearCertificate(HTTPRequest *req, HTTPResponse *res)
 
 void WebManager::handleRedirect(HTTPRequest * req, HTTPResponse * res) {
   res->setHeader("Connection", "close");
-  std::string dn = "https://";
+
+  std::string dn;
+  dn = "https://";
   dn += gatewayName;
   dn += ".local";
   res->setHeader("Location", dn);
