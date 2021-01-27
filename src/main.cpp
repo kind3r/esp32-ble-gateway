@@ -18,7 +18,7 @@ bool setupWifi()
   //    - after few faild connect attemtps, revert to config mode
   //    - retry connection after a while if no new configuration provided (or restart ?)
   // - credentials not set, enter config mode
-  
+
   WiFi.mode(WIFI_STA);
 
   WiFi.begin(ssid, password);
@@ -34,7 +34,7 @@ bool setupWifi()
 }
 
 bool setupWeb() {
-  return WebManager::init(prefs);
+  return WebManager::init(&prefs);
 }
 
 void setup()
@@ -57,7 +57,7 @@ void setup()
 
   MDNS.addService("http", "tcp", ESP_GW_WEBSERVER_PORT);
 
-  NobleApi::init();
+  NobleApi::init(&prefs);
 
   MDNS.addService("ws", "tcp", ESP_GW_WEBSOCKET_PORT);
 

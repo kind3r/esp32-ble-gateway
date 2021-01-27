@@ -11,6 +11,7 @@
 
 #include "config.h"
 #include "util.h"
+#include "security.h"
 #include <ArduinoJson.h>
 #include <HTTPSServer.hpp>
 #include <SSLCert.hpp>
@@ -25,7 +26,7 @@ using namespace httpsserver;
 
 class WebManager {
   public:
-    static bool init(Preferences preferences);
+    static bool init(Preferences *preferences);
     static void loop();
   private:
     static Preferences *prefs;

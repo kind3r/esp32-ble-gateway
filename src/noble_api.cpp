@@ -1,5 +1,7 @@
 #include "noble_api.h"
 
+bool NobleApi::ready = false;
+Preferences *NobleApi::prefs = nullptr;
 Security *NobleApi::sec = nullptr;
 WebSocketsServer *NobleApi::ws = nullptr;
 Challenge NobleApi::challenges[WEBSOCKETS_SERVER_CLIENT_MAX];
@@ -28,8 +30,18 @@ void clearChallenge(Challenge challenge)
 /**
    * Initialize API
    */
-void NobleApi::init()
+bool NobleApi::init(Preferences *preferences)
 {
+  prefs = preferences;
+
+  // generate a random key if one does not exist
+  if (!prefs->isKey("aes")) {
+    char aesKey[BLOCK_SIZE * 2 + 1];
+    Security::generateKey(aesKey);
+    prefs->putBytes("aes", (uint8_t *) aesKey, BLOCK_SIZE * 2);
+  }
+
+  // initialize clients and challenges
   for (auto i = 0; i < MAX_CLIENT_CONNECTIONS; i++)
   {
     peripheralConnections[i].client = INVALID_CLIENT;
@@ -38,15 +50,26 @@ void NobleApi::init()
   {
     clearChallenge(challenges[i]);
   }
+
+  // instantiate security module
+  char aesKey[BLOCK_SIZE * 2 + 1];
+  prefs->getBytes("aes", aesKey, BLOCK_SIZE * 2);
   sec = new Security(aesKey);
+
+  // initilalize BLE
   BLEApi::init();
   BLEApi::onDeviceFound(onBLEDeviceFound);
   BLEApi::onDeviceDisconnected(onBLEDeviceDisconnected);
   BLEApi::onCharacteristicNotification(onCharacteristicNotification);
+
+  // initialize websocket
   ws = new WebSocketsServer(ESP_GW_WEBSOCKET_PORT);
   ws->enableHeartbeat(30000, 5000, 3);
   ws->begin();
   ws->onEvent(onWsEvent);
+  ready = true;
+
+  return ready;
 }
 
 /**
@@ -54,9 +77,12 @@ void NobleApi::init()
  */
 void NobleApi::loop()
 {
-  // Process websocket events
-  ws->loop();
-  // TODO: disconnect clients that did not authenticate in a resonable timeframe
+  if (ready)
+  {
+    // Process websocket events
+    ws->loop();
+    // TODO: disconnect clients that did not authenticate in a resonable timeframe
+  }
 }
 
 /**
@@ -501,7 +527,8 @@ void NobleApi::sendServices(const uint8_t client, BLEPeripheralID id, std::vecto
   command["type"] = "servicesDiscover";
   command["peripheralUuid"] = BLEApi::idToString(id);
   JsonArray serviceUuids = command.createNestedArray("serviceUuids");
-  for (NimBLERemoteService *service : *services) {
+  for (NimBLERemoteService *service : *services)
+  {
     serviceUuids.add(service->getUUID().to128().toString());
   }
   sendJsonMessage(command, client);
@@ -514,7 +541,8 @@ void NobleApi::sendCharacteristics(const uint8_t client, BLEPeripheralID id, std
   command["peripheralUuid"] = BLEApi::idToString(id);
   command["serviceUuid"] = service;
   JsonArray characteristicsUuids = command.createNestedArray("characteristics");
-  for (NimBLERemoteCharacteristic *characteristic : *characteristics) {
+  for (NimBLERemoteCharacteristic *characteristic : *characteristics)
+  {
     JsonObject charact = characteristicsUuids.createNestedObject();
     charact["uuid"] = characteristic->getUUID().to128().toString();
     JsonArray properties = charact.createNestedArray("properties");

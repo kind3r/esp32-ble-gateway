@@ -7,10 +7,10 @@ uint8_t *WebManager::pkData = nullptr;
 SSLCert *WebManager::cert = nullptr;
 HTTPSServer *WebManager::serverSecure = nullptr;
 
-bool WebManager::init(Preferences preferences)
+bool WebManager::init(Preferences *preferences)
 {
-  prefs = &preferences;
-  // prefs->clear();
+  prefs = preferences;
+
   if (!initCertificate())
   {
     Serial.println("Could not init HTTPS certificate");
@@ -128,6 +128,10 @@ void WebManager::handleHome(HTTPRequest *req, HTTPResponse *res)
 void WebManager::handleConfigGet(HTTPRequest * req, HTTPResponse * res) {
   res->setHeader("Content-Type", "application/json");
   res->setHeader("Connection", "close");
+
+  char aesKey[BLOCK_SIZE * 2 + 1];
+  prefs->getBytes("aes", aesKey, BLOCK_SIZE * 2);
+  aesKey[BLOCK_SIZE * 2] = '\0';
 
   StaticJsonDocument<128> config;
   config["name"] = gatewayName;

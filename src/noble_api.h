@@ -9,11 +9,10 @@
 
 #include <WebSocketsServer.h>
 #include <ArduinoJson.h>
-#include <map>
-#include <set>
-#include "config.h"
 #include "security.h"
 #include "ble_api.h"
+
+#include <Preferences.h>
 
 // typedef std::map<BLEPeripheralID, uint8_t> PeripheralClient;
 struct PeripheralClient {
@@ -26,10 +25,12 @@ typedef uint8_t Challenge[BLOCK_SIZE];
 class NobleApi
 {
 public:
-  static void init();
+  static bool init(Preferences *preferences);
   static void loop();
 
 private:
+  static bool ready;
+  static Preferences *prefs;
   static Security *sec;
   static WebSocketsServer *ws;
   // static std::map<uint32_t, std::string> challenges;
