@@ -5,18 +5,44 @@
 #define ESP_GW_WEBSERVER_PORT 80
 #endif
 
-#include <WebServer.h>
+#ifndef ESP_GW_WEBSERVER_SECURE_PORT
+#define ESP_GW_WEBSERVER_SECURE_PORT 443
+#endif
+
+#include "config.h"
+#include "util.h"
+#include <ArduinoJson.h>
+#include <HTTPSServer.hpp>
+#include <SSLCert.hpp>
+#include <HTTPRequest.hpp>
+#include <HTTPResponse.hpp>
+
 #include <SPIFFS.h>
+
+#include <Preferences.h>
+
+using namespace httpsserver;
 
 class WebManager {
   public:
-    static bool init();
+    static bool init(Preferences preferences);
     static void loop();
   private:
-    static WebServer *server;
+    static Preferences *prefs;
+    static HTTPServer *server;
+    static uint8_t *certData;
+    static uint8_t *pkData;
+    static SSLCert * cert;
+    static HTTPSServer *serverSecure;
 
-    static void testHandler();
-    static void handleNotFound();
+    static bool initCertificate();
+    static void clearCertificate();
+    static void handleHome(HTTPRequest * req, HTTPResponse * res);
+    static void handleConfigGet(HTTPRequest * req, HTTPResponse * res);
+    static void handleConfigSet(HTTPRequest * req, HTTPResponse * res);
+    static void handleClearCertificate(HTTPRequest * req, HTTPResponse * res);
+    static void handleRedirect(HTTPRequest * req, HTTPResponse * res);
+    static void handleNotFound(HTTPRequest *req, HTTPResponse *res);
 };
 
 #endif

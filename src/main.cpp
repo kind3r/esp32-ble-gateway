@@ -1,5 +1,6 @@
 #include <config.h>
 #include <Arduino.h>
+#include <Preferences.h>
 #include <WiFi.h>
 #include <ESPmDNS.h>
 #include <ArduinoJson.h>
@@ -8,8 +9,16 @@
 #include "noble_api.h"
 #include "util.h"
 
+Preferences prefs;
+
 bool setupWifi()
 {
+  // wifi logic:
+  // - are credentials set then try to connect
+  //    - after few faild connect attemtps, revert to config mode
+  //    - retry connection after a while if no new configuration provided (or restart ?)
+  // - credentials not set, enter config mode
+  
   WiFi.mode(WIFI_STA);
 
   WiFi.begin(ssid, password);
@@ -25,13 +34,14 @@ bool setupWifi()
 }
 
 bool setupWeb() {
-  return WebManager::init();
+  return WebManager::init(prefs);
 }
 
 void setup()
 {
   Serial.begin(921600);
   // esp_log_level_set("*", ESP_LOG_VERBOSE);
+  prefs.begin("ESP32GW");
 
   do
   {
