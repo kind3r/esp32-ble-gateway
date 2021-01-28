@@ -9,12 +9,23 @@
       </div>
       <form>
         <div class="row" v-if="ready">
-          <div class="col col-12 mb-3">
+          <div class="col col-6 mb-3">
             <label for="name" class="form-label">Gateway name</label>
             <input type="text" class="form-control" id="name" aria-describedby="nameHelp" v-model="name" />
             <div id="nameHelp" class="form-text">
-              Local MDNS name: <code v-if="name.length > 0">{{ name }}.local</code>
+              MDNS name: <code v-if="name.length > 0">{{ name }}.local</code>
             </div>
+          </div>
+          <div class="col col-6 mb-3">
+            <label for="password" class="form-label">Gateway password</label>
+            <div class="input-group">
+              <input :type="attrPasswordType" class="form-control" id="password" aria-describedby="passwordHelp" v-model="password" />
+              <button class="btn btn-primary" type="button" v-on:click="toggleShowPassword">
+                <img class="icon" src="@/assets/fa/eye.svg?data" v-if="attrPasswordType == 'password'" />
+                <img class="icon" src="@/assets/fa/eye-slash.svg?data" v-else />
+              </button>
+            </div>
+            <div id="passwordHelp" class="form-text">Username is always <code>admin</code>. Empty = no change</div>
           </div>
           <div class="col col-6 mb-3">
             <label for="ssid" class="form-label">WiFi SSID</label>
@@ -52,7 +63,7 @@
         </div>
       </form>
     </div>
-    <div class="toast-container position-absolute p-3 bottom-0 start-50 translate-middle-x" id="toastPlacement">
+    <div class="toast-container position-absolute p-3 bottom-0 start-50 translate-middle-x" v-if="errors.length > 0 || savingSuccess">
       <div class="toast d-flex text-white bg-danger align-items-center" :class="{ show: errors.length > 0 }">
         <div class="toast-body">
           <ul>
@@ -64,9 +75,7 @@
         <button type="button" class="btn-close btn-close-white ms-auto me-2" v-on:click="clearErrors"></button>
       </div>
       <div class="toast d-flex text-white bg-success align-items-center" :class="{ show: savingSuccess }">
-        <div class="toast-body">
-          Configuration saved. ESP now rebooting.
-        </div>
+        <div class="toast-body">Configuration saved. ESP now rebooting.</div>
         <button type="button" class="btn-close btn-close-white ms-auto me-2" v-on:click="savingSuccess = false"></button>
       </div>
     </div>
@@ -84,15 +93,17 @@ export default {
     return {
       config: {},
       name: "",
+      password: "",
       wifi_ssid: "",
       wifi_pass: "",
       aes_key: "ssss",
       ready: false,
       errors: [],
+      attrPasswordType: "password",
       attrWifiPassType: "password",
       attrAesType: "password",
       saving: false,
-      savingSuccess: false
+      savingSuccess: false,
     };
   },
   computed: {
@@ -102,6 +113,7 @@ export default {
     configChanged() {
       const config = this.config;
       if (config.name != this.name) return true;
+      if (this.password != "") return true;
       if (config.wifi_ssid != this.wifi_ssid) return true;
       if (config.wifi_pass != this.wifi_pass) return true;
       if (config.aes_key != this.aes_key) return true;
@@ -111,7 +123,9 @@ export default {
   methods: {
     async loadConfig() {
       try {
-        const response = await axios.get("/config");
+        const response = await axios.get("/config", {
+          withCredentials: true,
+        });
         const config = response.data;
         this.config = config;
         this.name = config.name;
@@ -128,7 +142,6 @@ export default {
           this.errors.push("Error fetching configuration data");
         }
       }
-      this.ready = true;
       return false;
     },
     async saveConfig() {
@@ -141,7 +154,10 @@ export default {
         let newConfig = {};
         if (config.name != this.name) {
           newConfig.name = this.name;
-          config.naame = this.name;
+          config.name = this.name;
+        }
+        if (this.password != "") {
+          newConfig.password = this.password;
         }
         if (config.wifi_ssid != this.wifi_ssid) {
           newConfig.wifi_ssid = this.wifi_ssid;
@@ -157,7 +173,9 @@ export default {
         //   newConfig.aes_key = this.aes_key;
         // }
         try {
-          const response = await axios.post("/config", newConfig);
+          const response = await axios.post("/config", newConfig, {
+            withCredentials: true,
+          });
           if (response.data == "OK") {
             this.config = config;
             this.savingSuccess = true;
@@ -180,6 +198,13 @@ export default {
           }
         }
         this.saving = false;
+      }
+    },
+    toggleShowPassword() {
+      if (this.attrPasswordType == "password") {
+        this.attrPasswordType = "text";
+      } else {
+        this.attrPasswordType = "password";
       }
     },
     toggleShowWifiPass() {

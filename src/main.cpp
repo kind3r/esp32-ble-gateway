@@ -81,12 +81,19 @@ bool setupWeb() {
 void setup()
 {
   Serial.begin(921600);
+  delay(200);
+  Serial.println();
   // esp_log_level_set("*", ESP_LOG_VERBOSE);
   prefs.begin("ESP32GW");
 
   // initial name
   if (!prefs.isKey("name")) {
     prefs.putBytes("name", "esp32gw", 7);
+  }
+
+  // initial password for web admin
+  if (!prefs.isKey("password")) {
+    prefs.putBytes("password", "admin", 5);
   }
 
   size_t nameLen = prefs.getBytesLength("name");

@@ -9,6 +9,10 @@
 #define ESP_GW_WEBSERVER_SECURE_PORT 443
 #endif
 
+#ifndef ESP_GW_WEBSERVER_BUFFER_SIZE
+#define ESP_GW_WEBSERVER_BUFFER_SIZE 512
+#endif
+
 #include "util.h"
 #include "security.h"
 #include <ArduinoJson.h>
@@ -37,9 +41,12 @@ class WebManager {
     static HTTPSServer *serverSecure;
     static bool rebootRequired;
     static bool rebootNextLoop;
+    static char *password;
+    static uint8_t *buffer;
 
     static bool initCertificate();
     static void clearCertificate();
+    static void middlewareAuthentication(HTTPRequest * req, HTTPResponse * res, std::function<void()> next);
     static void handleHome(HTTPRequest * req, HTTPResponse * res);
     static void handleConfigGet(HTTPRequest * req, HTTPResponse * res);
     static void handleConfigSet(HTTPRequest * req, HTTPResponse * res);
