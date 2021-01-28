@@ -11,7 +11,7 @@ module.exports = {
     },
     plugins: [
       new HtmlWebpackInlineSourcePlugin(),
-    ]
+    ],
   },
   chainWebpack: (config) => {
     config
@@ -22,7 +22,7 @@ module.exports = {
       });
   },
   pluginOptions: {
-    compression:{
+    compression: {
       gzip: {
         filename: '[path].gz[query]',
         algorithm: 'gzip',

@@ -36,7 +36,7 @@ bool NobleApi::init(Preferences *preferences)
 
   // generate a random key if one does not exist
   if (!prefs->isKey("aes")) {
-    char aesKey[BLOCK_SIZE * 2 + 1];
+    char aesKey[BLOCK_SIZE * 2 + 1] = {};
     Security::generateKey(aesKey);
     prefs->putBytes("aes", (uint8_t *) aesKey, BLOCK_SIZE * 2);
   }
@@ -52,7 +52,7 @@ bool NobleApi::init(Preferences *preferences)
   }
 
   // instantiate security module
-  char aesKey[BLOCK_SIZE * 2 + 1];
+  char aesKey[BLOCK_SIZE * 2 + 1] = {};
   prefs->getBytes("aes", aesKey, BLOCK_SIZE * 2);
   sec = new Security(aesKey);
 

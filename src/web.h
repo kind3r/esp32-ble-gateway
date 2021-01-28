@@ -9,7 +9,6 @@
 #define ESP_GW_WEBSERVER_SECURE_PORT 443
 #endif
 
-#include "config.h"
 #include "util.h"
 #include "security.h"
 #include <ArduinoJson.h>
@@ -36,13 +35,15 @@ class WebManager {
     static uint8_t *pkData;
     static SSLCert * cert;
     static HTTPSServer *serverSecure;
+    static bool rebootRequired;
+    static bool rebootNextLoop;
 
     static bool initCertificate();
     static void clearCertificate();
     static void handleHome(HTTPRequest * req, HTTPResponse * res);
     static void handleConfigGet(HTTPRequest * req, HTTPResponse * res);
     static void handleConfigSet(HTTPRequest * req, HTTPResponse * res);
-    static void handleClearCertificate(HTTPRequest * req, HTTPResponse * res);
+    static void handleFactoryReset(HTTPRequest * req, HTTPResponse * res);
     static void handleRedirect(HTTPRequest * req, HTTPResponse * res);
     static void handleNotFound(HTTPRequest *req, HTTPResponse *res);
 };

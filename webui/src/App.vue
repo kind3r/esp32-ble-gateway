@@ -2,43 +2,55 @@
   <div id="app">
     <div class="container">
       <div class="container text-center">
-        <h1>BLE to WiFi Gateway configuration</h1>
+        <h1>Gateway configuration</h1>
         <div class="spinner-border" role="status" v-if="!ready">
           <span class="visually-hidden">Loading...</span>
         </div>
       </div>
-      <div class="row" v-if="ready">
-        <form>
-          <div class="mb-3">
+      <form>
+        <div class="row" v-if="ready">
+          <div class="col col-12 mb-3">
             <label for="name" class="form-label">Gateway name</label>
             <input type="text" class="form-control" id="name" aria-describedby="nameHelp" v-model="name" />
             <div id="nameHelp" class="form-text">
-              Your gateway will have the local MDNS name: <code v-if="name.length > 0">{{ name }}.local</code>
+              Local MDNS name: <code v-if="name.length > 0">{{ name }}.local</code>
             </div>
           </div>
-          <div class="mb-3">
+          <div class="col col-6 mb-3">
             <label for="ssid" class="form-label">WiFi SSID</label>
-            <input type="text" class="form-control" id="ssid" aria-describedby="ssidHelp" v-model="wifi_ssid" />
-            <div id="ssidHelp" class="form-text">Name of your wireless network.</div>
+            <input type="text" class="form-control" id="ssid" v-model="wifi_ssid" />
           </div>
-          <div class="mb-3">
+          <div class="col col-6 mb-3">
             <label for="pass" class="form-label">WiFi Password</label>
             <div class="input-group">
               <input :type="attrWifiPassType" class="form-control" id="pass" v-model="wifi_pass" />
-              <button class="btn btn-primary" type="button" v-on:click="toggleShowWifiPass">Show</button>
+              <button class="btn btn-primary" type="button" v-on:click="toggleShowWifiPass">
+                <img class="icon" src="@/assets/fa/eye.svg?data" v-if="attrWifiPassType == 'password'" />
+                <img class="icon" src="@/assets/fa/eye-slash.svg?data" v-else />
+              </button>
             </div>
           </div>
-          <div class="mb-3">
+          <div class="col col-12 mb-3">
             <label for="aes" class="form-label">AES Key</label>
             <div class="input-group">
               <input class="form-control" :type="attrAesType" id="aes" v-model="aes_key" />
-              <button class="btn btn-primary" type="button" v-on:click="toggleShowAes">Show</button>
+              <button class="btn btn-primary" type="button" v-on:click="toggleShowAes">
+                <img class="icon" src="@/assets/fa/eye.svg?data" v-if="attrAesType == 'password'" />
+                <img class="icon" src="@/assets/fa/eye-slash.svg?data" v-else />
+              </button>
             </div>
           </div>
 
-          <button type="submit" class="btn btn-primary disabled">Save configuration</button>
-        </form>
-      </div>
+          <div class="col col12 text-center mt-3">
+            <a href="javascript:void(0)" class="btn btn-primary" :class="{ disabled: !configChanged || saving }" v-on:click="saveConfig">
+              <div class="spinner-border spinner-border-sm" role="status" v-if="saving">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              Save configuration
+            </a>
+          </div>
+        </div>
+      </form>
     </div>
     <div class="toast-container position-absolute p-3 bottom-0 start-50 translate-middle-x" id="toastPlacement">
       <div class="toast d-flex text-white bg-danger align-items-center" :class="{ show: errors.length > 0 }">
@@ -51,6 +63,12 @@
         </div>
         <button type="button" class="btn-close btn-close-white ms-auto me-2" v-on:click="clearErrors"></button>
       </div>
+      <div class="toast d-flex text-white bg-success align-items-center" :class="{ show: savingSuccess }">
+        <div class="toast-body">
+          Configuration saved. ESP now rebooting.
+        </div>
+        <button type="button" class="btn-close btn-close-white ms-auto me-2" v-on:click="savingSuccess = false"></button>
+      </div>
     </div>
   </div>
 </template>
@@ -61,8 +79,10 @@ import "./assets/bootstrap.min.css";
 
 export default {
   name: "App",
+  components: {},
   data: function () {
     return {
+      config: {},
       name: "",
       wifi_ssid: "",
       wifi_pass: "",
@@ -71,11 +91,21 @@ export default {
       errors: [],
       attrWifiPassType: "password",
       attrAesType: "password",
+      saving: false,
+      savingSuccess: false
     };
   },
   computed: {
     hasErrors() {
       return this.errors.length > 0;
+    },
+    configChanged() {
+      const config = this.config;
+      if (config.name != this.name) return true;
+      if (config.wifi_ssid != this.wifi_ssid) return true;
+      if (config.wifi_pass != this.wifi_pass) return true;
+      if (config.aes_key != this.aes_key) return true;
+      return false;
     },
   },
   methods: {
@@ -83,6 +113,7 @@ export default {
       try {
         const response = await axios.get("/config");
         const config = response.data;
+        this.config = config;
         this.name = config.name;
         this.wifi_ssid = config.wifi_ssid;
         this.wifi_pass = config.wifi_pass;
@@ -94,10 +125,62 @@ export default {
           this.errors.push(error.toString());
         } else {
           console.log(error);
-          this.errors.push("Error fetch configuration data");
+          this.errors.push("Error fetching configuration data");
         }
       }
+      this.ready = true;
       return false;
+    },
+    async saveConfig() {
+      if (this.configChanged && !this.saving) {
+        this.saving = true;
+        this.errors = [];
+        // clone the current configuration so we can replace it later
+        let config = JSON.parse(JSON.stringify(this.config));
+        // only send changed values
+        let newConfig = {};
+        if (config.name != this.name) {
+          newConfig.name = this.name;
+          config.naame = this.name;
+        }
+        if (config.wifi_ssid != this.wifi_ssid) {
+          newConfig.wifi_ssid = this.wifi_ssid;
+          config.wifi_ssid = this.wifi_ssid;
+        }
+        if (config.wifi_pass != this.wifi_pass) {
+          newConfig.wifi_pass = this.wifi_pass;
+          config.wifi_pass = this.wifi_pass;
+        }
+        // not sure if we want people to manually change the AES key just yet
+        // but in either case it will need proper validation
+        // if (config.aes_key != this.aes_key) {
+        //   newConfig.aes_key = this.aes_key;
+        // }
+        try {
+          const response = await axios.post("/config", newConfig);
+          if (response.data == "OK") {
+            this.config = config;
+            this.savingSuccess = true;
+            setTimeout(() => {
+              // TODO: this still needs some work as on a name change https certificate needs
+              // to be regenerated and that takes quite some time.
+              // Maybe we can test with some ajax calls from time to time and only reload when
+              // ESP GW becomes available (try http only to bypass cert error)
+              window.location.href = "https://" + config.name + ".local";
+            }, 2000);
+          } else {
+            this.errors.push("Error saving configuration data");
+          }
+        } catch (error) {
+          if (typeof error.toString != "undefined") {
+            this.errors.push(error.toString());
+          } else {
+            console.log(error);
+            this.errors.push("Error saving configuration data");
+          }
+        }
+        this.saving = false;
+      }
     },
     toggleShowWifiPass() {
       if (this.attrWifiPassType == "password") {
@@ -122,3 +205,15 @@ export default {
   },
 };
 </script>
+<style scoped>
+.icon {
+  width: 1.2em;
+  display: inline-block;
+  text-transform: none;
+  line-height: 1;
+  vertical-align: text-bottom;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  filter: invert(1);
+}
+</style>
