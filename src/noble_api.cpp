@@ -1,7 +1,6 @@
 #include "noble_api.h"
 
 bool NobleApi::ready = false;
-Preferences *NobleApi::prefs = nullptr;
 Security *NobleApi::sec = nullptr;
 WebSocketsServer *NobleApi::ws = nullptr;
 Challenge NobleApi::challenges[WEBSOCKETS_SERVER_CLIENT_MAX];
@@ -30,17 +29,8 @@ void clearChallenge(Challenge challenge)
 /**
    * Initialize API
    */
-bool NobleApi::init(Preferences *preferences)
+bool NobleApi::init()
 {
-  prefs = preferences;
-
-  // generate a random key if one does not exist
-  if (!prefs->isKey("aes")) {
-    char aesKey[BLOCK_SIZE * 2 + 1] = {};
-    Security::generateKey(aesKey);
-    prefs->putBytes("aes", (uint8_t *) aesKey, BLOCK_SIZE * 2);
-  }
-
   // initialize clients and challenges
   for (auto i = 0; i < MAX_CLIENT_CONNECTIONS; i++)
   {
@@ -52,9 +42,7 @@ bool NobleApi::init(Preferences *preferences)
   }
 
   // instantiate security module
-  char aesKey[BLOCK_SIZE * 2 + 1] = {};
-  prefs->getBytes("aes", aesKey, BLOCK_SIZE * 2);
-  sec = new Security(aesKey);
+  sec = new Security(GwSettings::getAes());
 
   // initilalize BLE
   BLEApi::init();

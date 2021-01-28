@@ -1,6 +1,5 @@
 #include "web.h"
 
-Preferences *WebManager::prefs = nullptr;
 HTTPServer *WebManager::server = nullptr;
 uint8_t *WebManager::certData = nullptr;
 uint8_t *WebManager::pkData = nullptr;
@@ -8,23 +7,15 @@ SSLCert *WebManager::cert = nullptr;
 HTTPSServer *WebManager::serverSecure = nullptr;
 bool WebManager::rebootRequired = false;
 bool WebManager::rebootNextLoop = false;
-char *WebManager::password = nullptr;
 uint8_t *WebManager::buffer = new uint8_t[ESP_GW_WEBSERVER_BUFFER_SIZE];
 
-bool WebManager::init(Preferences *preferences)
+bool WebManager::init()
 {
-  prefs = preferences;
-
   if (!initCertificate())
   {
     Serial.println("Could not init HTTPS certificate");
     return false;
   }
-
-  size_t passwordLen = prefs->getBytesLength("password");
-  password = new char[passwordLen + 1];
-  prefs->getBytes("password", password, passwordLen);
-  password[passwordLen] = '\0';
 
   serverSecure = new HTTPSServer(cert, ESP_GW_WEBSERVER_SECURE_PORT, 1);
   serverSecure->addMiddleware(middlewareAuthentication);
@@ -64,36 +55,19 @@ void WebManager::loop()
 
 bool WebManager::initCertificate()
 {
-  // gateway name (as set by the user)
-  size_t nameLen = prefs->getBytesLength("name");
-  char name[nameLen + 1] = {};
-  prefs->getBytes("name", name, nameLen);
-
-  if (prefs->isKey("name") && prefs->isKey("cert") && prefs->isKey("pk"))
+  if (GwSettings::hasCert())
   {
     Serial.println("Loading stored HTTPS certificate");
 
-    // certificate name (last generated)
-    size_t cert_nameLen = prefs->getBytesLength("cert_name");
-    char cert_name[nameLen + 1] = {};
-    prefs->getBytes("cert_name", cert_name, cert_nameLen);
-
     // if name does not match the certificate name, don't load but regenerate instead
-    if (strcmp(cert_name, name) == 0)
+    if (strcmp(GwSettings::getCertName(), GwSettings::getName()) == 0)
     {
-      size_t certLen = prefs->getBytesLength("cert");
-      certData = new uint8_t[certLen];
-      // uint8_t certData[certLen];
-      prefs->getBytes("cert", certData, certLen);
+      Serial.printf("Loaded cert from nvs [%s.local][cert=%d][pk=%d]\n",
+                    GwSettings::getCertName(),
+                    GwSettings::getCertLen(),
+                    GwSettings::getPkLen());
 
-      size_t pkLen = prefs->getBytesLength("pk");
-      pkData = new uint8_t[pkLen];
-      // uint8_t pkData[pkLen];
-      prefs->getBytes("pk", pkData, pkLen);
-
-      Serial.printf("Loaded cert from nvs [%s.local][cert=%d][pk=%d]\n", name, certLen, pkLen);
-
-      cert = new SSLCert(certData, certLen, pkData, pkLen);
+      cert = new SSLCert(GwSettings::getCert(), GwSettings::getCertLen(), GwSettings::getPk(), GwSettings::getPkLen());
     }
   }
 
@@ -104,7 +78,7 @@ bool WebManager::initCertificate()
 
     cert = new SSLCert();
     std::string dn = "CN=";
-    dn += name;
+    dn += GwSettings::getName();
     dn += ".local,O=FancyCompany,C=RO";
     int createCertResult = createSelfSignedCert(
         *cert,
@@ -118,10 +92,10 @@ bool WebManager::initCertificate()
       Serial.printf("Cerating certificate failed. Error Code = 0x%02X, check SSLCert.hpp for details", createCertResult);
       return false;
     }
-    Serial.printf("Creating the certificate was successful [%s.local][cert=%d][pk=%d]\n", name, cert->getCertLength(), cert->getPKLength());
-    prefs->putBytes("cert", cert->getCertData(), cert->getCertLength());
-    prefs->putBytes("pk", cert->getPKData(), cert->getPKLength());
-    prefs->putBytes("cert_name", name, nameLen);
+    Serial.printf("Creating the certificate was successful [%s.local][cert=%d][pk=%d]\n", GwSettings::getName(), cert->getCertLength(), cert->getPKLength());
+    GwSettings::setCertName(GwSettings::getName(), GwSettings::getNameLen());
+    GwSettings::setCert(cert->getCertData(), cert->getCertLength());
+    GwSettings::setPk(cert->getPKData(), cert->getPKLength());
   }
 
   return true;
@@ -132,7 +106,7 @@ void WebManager::middlewareAuthentication(HTTPRequest *req, HTTPResponse *res, s
   Serial.println("Auth middleware started");
   std::string reqPassword = req->getBasicAuthPassword();
 
-  if (reqPassword.length() == 0 || strcmp(password, reqPassword.c_str()) != 0)
+  if (reqPassword.length() == 0 || strcmp(GwSettings::getPassword(), reqPassword.c_str()) != 0)
   {
     res->setStatusCode(401);
     res->setStatusText("Unauthorized");
@@ -142,7 +116,9 @@ void WebManager::middlewareAuthentication(HTTPRequest *req, HTTPResponse *res, s
     // shouldn't display the login information on this page, of course ;-)
     res->println("401. Unauthorized (defaults are admin/admin)");
     Serial.println("Auth failed");
-  } else {
+  }
+  else
+  {
     Serial.println("Auth success");
     next();
   }
@@ -163,7 +139,7 @@ void WebManager::handleHome(HTTPRequest *req, HTTPResponse *res)
   } while (length > 0);
   file.close();
   SPIFFS.end();
-  
+
   meminfo();
 }
 
@@ -174,30 +150,19 @@ void WebManager::handleConfigGet(HTTPRequest *req, HTTPResponse *res)
 
   StaticJsonDocument<128> config;
 
-  size_t nameLen = prefs->getBytesLength("name");
-  char name[nameLen + 1] = {};
-  prefs->getBytes("name", name, nameLen);
-  config["name"] = name;
+  config["name"] = GwSettings::getName();
 
-  if (prefs->isKey("wifi_ssid"))
+  if (GwSettings::getSsidLen() > 0)
   {
-    size_t ssidLen = prefs->getBytesLength("wifi_ssid");
-    char ssid[ssidLen + 1] = {};
-    prefs->getBytes("wifi_ssid", ssid, ssidLen);
-    config["wifi_ssid"] = ssid;
+    config["wifi_ssid"] = GwSettings::getSsid();
   }
 
-  if (prefs->isKey("wifi_pass"))
+  if (GwSettings::getPassLen() > 0)
   {
-    size_t passLen = prefs->getBytesLength("wifi_pass");
-    char pass[passLen + 1] = {};
-    prefs->getBytes("wifi_pass", pass, passLen);
-    config["wifi_pass"] = pass;
+    config["wifi_pass"] = GwSettings::getPass();
   }
 
-  char aesKey[BLOCK_SIZE * 2 + 1] = {};
-  prefs->getBytes("aes", aesKey, BLOCK_SIZE * 2);
-  config["aes_key"] = aesKey;
+  config["aes_key"] = GwSettings::getAes();
 
   size_t configLength = serializeJson(config, buffer, ESP_GW_WEBSERVER_BUFFER_SIZE);
   config.clear();
@@ -249,7 +214,7 @@ void WebManager::handleConfigSet(HTTPRequest *req, HTTPResponse *res)
   if (name && strlen(name) > 0)
   {
     Serial.printf("Setting new name [%s]\n", name);
-    prefs->putBytes("name", name, strlen(name));
+    GwSettings::setName(name, strlen(name) + 1);
     rebootRequired = true;
   }
 
@@ -257,10 +222,7 @@ void WebManager::handleConfigSet(HTTPRequest *req, HTTPResponse *res)
   if (newPassword && strlen(newPassword) > 0)
   {
     Serial.printf("Setting new admin password [%s]\n", newPassword);
-    prefs->putBytes("password", newPassword, strlen(newPassword));
-    delete[] password;
-    password = new char[strlen(newPassword) + 1];
-    memcpy(password, newPassword, strlen(newPassword) + 1);
+    GwSettings::setPassword(newPassword, strlen(newPassword) + 1);
     delete[] newPassword;
   }
 
@@ -268,7 +230,7 @@ void WebManager::handleConfigSet(HTTPRequest *req, HTTPResponse *res)
   if (ssid && strlen(ssid) > 0)
   {
     Serial.printf("Setting new WiFi SSID [%s]\n", ssid);
-    prefs->putBytes("wifi_ssid", ssid, strlen(ssid));
+    GwSettings::setSsid(ssid, strlen(ssid) + 1);
     rebootRequired = true;
   }
 
@@ -276,7 +238,7 @@ void WebManager::handleConfigSet(HTTPRequest *req, HTTPResponse *res)
   if (pass && strlen(pass) > 0)
   {
     Serial.printf("Setting new WiFi Password [%s]\n", pass);
-    prefs->putBytes("wifi_pass", pass, strlen(pass));
+    GwSettings::setPass(pass, strlen(pass) + 1);
     rebootRequired = true;
   }
 
@@ -294,7 +256,7 @@ void WebManager::handleConfigSet(HTTPRequest *req, HTTPResponse *res)
 
 void WebManager::handleFactoryReset(HTTPRequest *req, HTTPResponse *res)
 {
-  prefs->clear();
+  GwSettings::clear();
   res->setHeader("Content-Type", "text/html");
   res->setHeader("Connection", "close");
   res->setStatusCode(200);
@@ -309,13 +271,9 @@ void WebManager::handleRedirect(HTTPRequest *req, HTTPResponse *res)
 {
   res->setHeader("Connection", "close");
 
-  size_t nameLen = prefs->getBytesLength("name");
-  char name[nameLen + 1] = {};
-  prefs->getBytes("name", name, nameLen);
-
   std::string dn;
   dn = "https://";
-  dn += name;
+  dn += GwSettings::getName();
   dn += ".local";
   res->setHeader("Location", dn);
   res->setStatusCode(301);
