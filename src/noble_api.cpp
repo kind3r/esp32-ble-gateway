@@ -1,5 +1,6 @@
 #include "noble_api.h"
 
+bool NobleApi::ready = false;
 Security *NobleApi::sec = nullptr;
 WebSocketsServer *NobleApi::ws = nullptr;
 Challenge NobleApi::challenges[WEBSOCKETS_SERVER_CLIENT_MAX];
@@ -28,8 +29,9 @@ void clearChallenge(Challenge challenge)
 /**
    * Initialize API
    */
-void NobleApi::init()
+bool NobleApi::init()
 {
+  // initialize clients and challenges
   for (auto i = 0; i < MAX_CLIENT_CONNECTIONS; i++)
   {
     peripheralConnections[i].client = INVALID_CLIENT;
@@ -38,15 +40,24 @@ void NobleApi::init()
   {
     clearChallenge(challenges[i]);
   }
-  sec = new Security(aesKey);
+
+  // instantiate security module
+  sec = new Security(GwSettings::getAes());
+
+  // initilalize BLE
   BLEApi::init();
   BLEApi::onDeviceFound(onBLEDeviceFound);
   BLEApi::onDeviceDisconnected(onBLEDeviceDisconnected);
   BLEApi::onCharacteristicNotification(onCharacteristicNotification);
+
+  // initialize websocket
   ws = new WebSocketsServer(ESP_GW_WEBSOCKET_PORT);
   ws->enableHeartbeat(30000, 5000, 3);
   ws->begin();
   ws->onEvent(onWsEvent);
+  ready = true;
+
+  return ready;
 }
 
 /**
@@ -54,9 +65,12 @@ void NobleApi::init()
  */
 void NobleApi::loop()
 {
-  // Process websocket events
-  ws->loop();
-  // TODO: disconnect clients that did not authenticate in a resonable timeframe
+  if (ready)
+  {
+    // Process websocket events
+    ws->loop();
+    // TODO: disconnect clients that did not authenticate in a resonable timeframe
+  }
 }
 
 /**
@@ -188,8 +202,7 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
             const char *tempUuid = command["peripheralUuid"];
             if (tempUuid != nullptr)
             {
-              BLEPeripheralID peripheralUuid;
-              sec->fromHex(tempUuid, strlen(tempUuid), peripheralUuid.data());
+              BLEPeripheralID peripheralUuid = BLEApi::idFromString(tempUuid);
 
               // connection
               if (strcmp(action, "connect") == 0)
@@ -220,7 +233,7 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
               {
                 if (strcmp(action, "discoverServices") == 0)
                 {
-                  std::map<std::string, BLERemoteService *> *services = BLEApi::discoverServices(peripheralUuid);
+                  std::vector<NimBLERemoteService *> *services = BLEApi::discoverServices(peripheralUuid);
                   if (services != nullptr)
                   {
                     sendServices(client, peripheralUuid, services);
@@ -229,7 +242,7 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
                 else if (strcmp(action, "discoverCharacteristics") == 0)
                 {
                   std::string serviceUuid = command["serviceUuid"];
-                  std::map<std::string, BLERemoteCharacteristic *> *characteristics = BLEApi::discoverCharacteristics(peripheralUuid, serviceUuid);
+                  std::vector<NimBLERemoteCharacteristic *> *characteristics = BLEApi::discoverCharacteristics(peripheralUuid, serviceUuid);
                   if (characteristics != nullptr)
                   {
                     sendCharacteristics(client, peripheralUuid, serviceUuid, characteristics);
@@ -300,17 +313,17 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
   }
 }
 
-void NobleApi::onBLEDeviceFound(BLEAdvertisedDevice advertisedDevice, BLEPeripheralID id)
+void NobleApi::onBLEDeviceFound(NimBLEAdvertisedDevice *advertisedDevice, BLEPeripheralID id)
 {
   StaticJsonDocument<1024> command;
   command["type"] = "discover";
   command["peripheralUuid"] = BLEApi::idToString(id);
-  command["address"] = advertisedDevice.getAddress().toString();
-  if (advertisedDevice.getAddressType() == BLE_ADDR_TYPE_PUBLIC || advertisedDevice.getAddressType() == BLE_ADDR_TYPE_RPA_PUBLIC)
+  command["address"] = advertisedDevice->getAddress().toString();
+  if (advertisedDevice->getAddressType() == BLE_ADDR_PUBLIC || advertisedDevice->getAddressType() == BLE_ADDR_PUBLIC_ID)
   {
     command["addressType"] = "public";
   }
-  else if (advertisedDevice.getAddressType() == BLE_ADDR_TYPE_RANDOM || advertisedDevice.getAddressType() == BLE_ADDR_TYPE_RPA_RANDOM)
+  else if (advertisedDevice->getAddressType() == BLE_ADDR_RANDOM || advertisedDevice->getAddressType() == BLE_ADDR_RANDOM_ID)
   {
     command["addressType"] = "random";
   }
@@ -319,22 +332,22 @@ void NobleApi::onBLEDeviceFound(BLEAdvertisedDevice advertisedDevice, BLEPeriphe
     command["addressType"] = "unknown";
   }
   command["connectable"] = "true";
-  command["rssi"] = advertisedDevice.getRSSI();
-  command["advertisement"]["localName"] = advertisedDevice.getName();
-  if (advertisedDevice.haveTXPower())
+  command["rssi"] = advertisedDevice->getRSSI();
+  command["advertisement"]["localName"] = advertisedDevice->getName();
+  if (advertisedDevice->haveTXPower())
   {
-    command["advertisement"]["txPowerLevel"] = advertisedDevice.getTXPower();
+    command["advertisement"]["txPowerLevel"] = advertisedDevice->getTXPower();
   }
-  if (advertisedDevice.haveServiceUUID())
+  if (advertisedDevice->haveServiceUUID())
   {
     JsonArray serviceUuids = command["advertisement"].createNestedArray("serviceUuids");
-    serviceUuids.add(advertisedDevice.getServiceUUID().toString());
+    serviceUuids.add(advertisedDevice->getServiceUUID().toString());
   }
-  if (advertisedDevice.haveManufacturerData())
+  if (advertisedDevice->haveManufacturerData())
   {
-    char manufacturerData[advertisedDevice.getManufacturerData().length() * 2 + 1];
-    sec->toHex((uint8_t *)advertisedDevice.getManufacturerData().data(), advertisedDevice.getManufacturerData().length(), manufacturerData);
-    manufacturerData[advertisedDevice.getManufacturerData().length() * 2 + 1] = '\0';
+    char manufacturerData[advertisedDevice->getManufacturerData().length() * 2 + 1];
+    sec->toHex((uint8_t *)advertisedDevice->getManufacturerData().data(), advertisedDevice->getManufacturerData().length(), manufacturerData);
+    manufacturerData[advertisedDevice->getManufacturerData().length() * 2 + 1] = '\0';
     command["advertisement"]["manufacturerData"] = manufacturerData;
   }
 
@@ -496,52 +509,52 @@ void NobleApi::sendDisconnected(const uint8_t client, BLEPeripheralID id, std::s
   sendJsonMessage(command, client);
 }
 
-void NobleApi::sendServices(const uint8_t client, BLEPeripheralID id, std::map<std::string, BLERemoteService *> *services)
+void NobleApi::sendServices(const uint8_t client, BLEPeripheralID id, std::vector<NimBLERemoteService *> *services)
 {
   StaticJsonDocument<512> command;
   command["type"] = "servicesDiscover";
   command["peripheralUuid"] = BLEApi::idToString(id);
   JsonArray serviceUuids = command.createNestedArray("serviceUuids");
-  for (std::map<std::string, BLERemoteService *>::iterator it = services->begin(); it != services->end(); ++it)
+  for (NimBLERemoteService *service : *services)
   {
-    serviceUuids.add(it->first.c_str());
+    serviceUuids.add(service->getUUID().to128().toString());
   }
   sendJsonMessage(command, client);
 }
 
-void NobleApi::sendCharacteristics(const uint8_t client, BLEPeripheralID id, std::string service, std::map<std::string, BLERemoteCharacteristic *> *characteristics)
+void NobleApi::sendCharacteristics(const uint8_t client, BLEPeripheralID id, std::string service, std::vector<NimBLERemoteCharacteristic *> *characteristics)
 {
   StaticJsonDocument<512> command;
   command["type"] = "characteristicsDiscover";
   command["peripheralUuid"] = BLEApi::idToString(id);
   command["serviceUuid"] = service;
   JsonArray characteristicsUuids = command.createNestedArray("characteristics");
-  for (std::map<std::string, BLERemoteCharacteristic *>::iterator it = characteristics->begin(); it != characteristics->end(); ++it)
+  for (NimBLERemoteCharacteristic *characteristic : *characteristics)
   {
-    JsonObject characteristic = characteristicsUuids.createNestedObject();
-    characteristic["uuid"] = it->first.c_str();
-    JsonArray properties = characteristic.createNestedArray("properties");
-    if (it->second->canRead())
+    JsonObject charact = characteristicsUuids.createNestedObject();
+    charact["uuid"] = characteristic->getUUID().to128().toString();
+    JsonArray properties = charact.createNestedArray("properties");
+    if (characteristic->canRead())
     {
       properties.add("read");
     }
-    if (it->second->canWrite())
+    if (characteristic->canWrite())
     {
       properties.add("write");
     }
-    if (it->second->canWriteNoResponse())
+    if (characteristic->canWriteNoResponse())
     {
       properties.add("writeWithoutResponse");
     }
-    if (it->second->canNotify())
+    if (characteristic->canNotify())
     {
       properties.add("notify");
     }
-    if (it->second->canIndicate())
+    if (characteristic->canIndicate())
     {
       properties.add("indicate");
     }
-    if (it->second->canBroadcast())
+    if (characteristic->canBroadcast())
     {
       properties.add("broadcast");
     }

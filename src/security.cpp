@@ -23,6 +23,12 @@ Security::~Security()
   esp_aes_free(&aesContext);
 }
 
+void Security::generateKey(char *newKey) {
+  uint8_t key[BLOCK_SIZE];
+  esp_fill_random(key, BLOCK_SIZE);
+  toHex(key, BLOCK_SIZE, newKey);
+}
+
 void Security::setKey(const char *aesKey)
 {
   keyLength = strlen(aesKey) / 2;
