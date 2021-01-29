@@ -74,6 +74,7 @@ bool WebManager::initCertificate()
   if (cert == nullptr)
   {
     // requires larger stack #define CONFIG_ARDUINO_LOOP_STACK_SIZE 10240
+    // should run this in a separate task as sdk can't be configured via platformio.ini
     Serial.println("Generating new HTTPS certificate");
 
     cert = new SSLCert();

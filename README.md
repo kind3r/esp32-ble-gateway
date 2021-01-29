@@ -7,8 +7,7 @@ Feeling generous and want to support my work, here is [my PayPal link](https://p
 
 
 ## What works for now
-- WiFi init
-- BLE init
+- WiFi init with AP style configuration via HTTPS web page
 - Websocket communication and AES 128 CBC auth
 - Start/stop BLE scan
 - Discover devices
@@ -29,11 +28,15 @@ This short guide explains how to install the gateway and configure the [TTLock H
 
 ### Preparing the ESP32
 
-Open the cloned repo in VSCode and PlatformIO should automatically install all the required dependencies. After this is done, you need to create a `config.cpp` file in the src folder based on the `config.cpp.example` template. Update this config file with your WiFi credentials and a **random generated 128 bit AES key** that will be used for encryption during the authentication phase. You can use [online tools](https://www.allkeysgenerator.com/Random/Security-Encryption-Key-Generator.aspx) to generate the key.  
+Open the cloned repo in VSCode and PlatformIO should automatically install all the required dependencies. You need to modify `sdkconfig.h` located in `.platformio/packages/framework-arduinoespressif32/tools/sdk/include/config` and change `CONFIG_ARDUINO_LOOP_STACK_SIZE` to `10240`. This is because the HTTPS certificate generation takes more stack space.
 
 > At the moment, the project is only configured to work on **ESP32-WROVER boards**. If you have a different board, you need to edit the `platformio.ini` file and create your own env configuration. As of this writing the code takes about 1.5Mb so I'm using the `min_spiffs.csv` partition scheme in order to be able to hopefully do OTA in the future.
 
-Connect your ESP32 to the PC, go to PlatformIO menu (the alien head on the VSCode's left toolbar, where you have files, search, plugins etc.) then in **Project Tasks** choose **env:esp-wrover** -> **General** -> **Upload and Monitor**. This should start the build process and once it is finished the compiled result will be uploaded to the ESP32. Once the upload finishes you should start seeing some debug output, including if the WiFi connection was succesfull and the **IP address of the device** (which you need for configuring the TTLock Home Assistant addon).
+Connect your ESP32 to the PC, go to PlatformIO menu (the alien head on the VSCode's left toolbar, where you have files, search, plugins etc.) then in **Project Tasks** choose **env:esp-wrover** -> **General** -> **Upload and Monitor**. This should start the build process and once it is finished the compiled result will be uploaded to the ESP32.  
+
+Once the upload finishes you should start seeing some debug output, including the status of the WiFi AP and HTTPS certificate generation status (it will take quite some time so be patient). After the startup is completed, you can connect to ESP's AP named **ESP32GW** with password **87654321** and access [https://esp32gw.local](https://esp32gw.local). The browser will complain about the self-signed certificate but you can ignore and continue. The default username and password are **admin/admin**. Configure your wifi credentials and copy the **AES Key** which you need to setup in the **TTLock Home Assistant addon**.  
+
+After saving the new configuration, the ESP will reboot, connect to your WiFi and output it's **IP address** on the serial port (it will also generate a new HTTPS certificate if you changed it's name). It will also be accessible via `esp32gw.local` (or the new name you gave it) via MDNS if this service is working in your network. You can still make configuration changes by accessing it's IP address in the browser.
 
 ### Setting up HA
 
@@ -42,7 +45,7 @@ Once you have the ESP runing the gateway software, go to the **TTLock Home Assis
 ```yaml
 gateway: noble
 gateway_host: IP_ADDRESS_OF_YOUR_ESP
-gateway_port: 80
+gateway_port: 8080
 gateway_key: AES_KEY_FROM_ESP_CONFIG
 gateway_user: admin
 gateway_pass: admin
@@ -60,10 +63,8 @@ If everything was done correctly you should not be able to use the addon using t
 - check if multiple connections to multiple devices are possible (`BLEDevice::createClient` seems to store only 1 `BLEClient`, but we could just create the client ourselfs)
 - Service UUID filtering for scan and allow/disallow duplicates
 - Timeout for non-authenticated connections
-- Initial wifi AP based setup
-- Web configuration for AES key and credentials
 - Investigate unstable wifi (sometimes it connects but there is no traffic; try to ping gw during setup)
-- Troubleshoot random crashes
+- Optimize memory fragmentation
 
 ### Random thoughts
 
