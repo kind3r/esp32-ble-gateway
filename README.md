@@ -28,11 +28,13 @@ This short guide explains how to install the gateway and configure the [TTLock H
 
 ### Preparing the ESP32
 
-Open the cloned repo in VSCode and PlatformIO should automatically install all the required dependencies. You need to modify `sdkconfig.h` located in `.platformio/packages/framework-arduinoespressif32/tools/sdk/include/config` and change `CONFIG_ARDUINO_LOOP_STACK_SIZE` to `10240`. This is because the HTTPS certificate generation takes more stack space.
+Open the cloned repo in VSCode and PlatformIO should automatically install all the required dependencies (it will take a couple of minutes, dependiing on your computer and internet speed, be patient and let it *settle*). You need to modify `sdkconfig.h` located in `.platformio/packages/framework-arduinoespressif32/tools/sdk/include/config` and change `CONFIG_ARDUINO_LOOP_STACK_SIZE` to `10240`. This is because the HTTPS certificate generation takes more stack space.
 
 > At the moment, the project is only configured to work on **ESP32-WROVER boards**. If you have a different board, you need to edit the `platformio.ini` file and create your own env configuration. As of this writing the code takes about 1.5Mb so I'm using the `min_spiffs.csv` partition scheme in order to be able to hopefully do OTA in the future.
 
-Connect your ESP32 to the PC, go to PlatformIO menu (the alien head on the VSCode's left toolbar, where you have files, search, plugins etc.) then in **Project Tasks** choose **env:esp-wrover** -> **General** -> **Upload and Monitor**. This should start the build process and once it is finished the compiled result will be uploaded to the ESP32.  
+Connect your ESP32 to the PC, go to PlatformIO menu (the alien head on the VSCode's left toolbar, where you have files, search, plugins etc.) then in **Project Tasks** choose **env:esp-wrover** -> **Platform** -> **Upload Filesystem Imager**. This will 'format' the storage and upload the web UI.  
+
+Next, you need to build and upload the main code. In **Project Tasks** choose **env:esp-wrover** -> **General** -> **Upload and Monitor**. This should start the build process and once it is finished the compiled result will be uploaded to the ESP32.  
 
 Once the upload finishes you should start seeing some debug output, including the status of the WiFi AP and HTTPS certificate generation status (it will take quite some time so be patient). After the startup is completed, you can connect to ESP's AP named **ESP32GW** with password **87654321** and access [https://esp32gw.local](https://esp32gw.local). The browser will complain about the self-signed certificate but you can ignore and continue. The default username and password are **admin/admin**. Configure your wifi credentials and copy the **AES Key** which you need to setup in the **TTLock Home Assistant addon**.  
 
