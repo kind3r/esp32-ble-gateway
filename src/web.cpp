@@ -224,7 +224,8 @@ void WebManager::handleConfigSet(HTTPRequest *req, HTTPResponse *res)
   {
     Serial.printf("Setting new admin password [%s]\n", newPassword);
     GwSettings::setPassword(newPassword, strlen(newPassword) + 1);
-    delete[] newPassword;
+    // delete[] newPassword;
+    rebootRequired = true;
   }
 
   const char *ssid = config["wifi_ssid"];
