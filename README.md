@@ -28,7 +28,7 @@ This short guide explains how to install the gateway and configure the [TTLock H
 
 ### Preparing the ESP32
 
-Open the cloned repo in VSCode and PlatformIO should automatically install all the required dependencies (it will take a couple of minutes, dependivisuang on your computer and internet speed, be patient and let it *settle*). You need to modify `sdkconfig.h` located in `.platformio/packages/framework-arduinoespressif32/tools/sdk/include/config` and change `CONFIG_ARDUINO_LOOP_STACK_SIZE` to `10240`. This is because the HTTPS certificate generation takes more stack space.
+Open the cloned repo in VSCode and PlatformIO should automatically install all the required dependencies (it will take a couple of minutes, depending on your computer and internet speed, be patient and let it *settle*). You need to modify `sdkconfig.h` located in `.platformio/packages/framework-arduinoespressif32/tools/sdk/include/config` and change `CONFIG_ARDUINO_LOOP_STACK_SIZE` to `10240`. This is because the HTTPS certificate generation takes more stack space.
 
 > At the moment, the project is only configured to work on **ESP32-WROVER boards**. If you have a different board, you need to edit the `platformio.ini` file and create your own env configuration. As of this writing the code takes about 1.5Mb so I'm using the `min_spiffs.csv` partition scheme in order to be able to hopefully do OTA in the future.
 
