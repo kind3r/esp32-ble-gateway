@@ -3,7 +3,6 @@
 
 bool BLEApi::_isReady = false;
 bool BLEApi::_isScanning = false;
-bool BLEApi::_scanMustStop = false;
 NimBLEScan *BLEApi::bleScan = nullptr;
 BLEDeviceFound BLEApi::_cbOnDeviceFound = nullptr;
 BLEDeviceEvent BLEApi::_cbOnDeviceConnected = nullptr;
@@ -54,10 +53,9 @@ void BLEApi::init()
     NimBLEDevice::init("ESP32BLEGW");
     bleScan = NimBLEDevice::getScan();
     _advertisedDeviceCallback = new myAdvertisedDeviceCallbacks();
-    bleScan->setAdvertisedDeviceCallbacks(_advertisedDeviceCallback);
+    bleScan->setAdvertisedDeviceCallbacks(_advertisedDeviceCallback, true);
     bleScan->setInterval(1250); // 1349
     bleScan->setWindow(650);    // 449
-    bleScan->setActiveScan(true);
     _clientCallback = new myClientCallbacks();
     // TODO: maybe do some pre-descovery to get address types of devices around us
     // in case ESP was rebooted and clients try to connect before doing a scan
@@ -75,25 +73,18 @@ bool BLEApi::isReady()
 
 /**
  * Start scanning for BLE devices
- * @param duration of the scan in seconds. If 0, it will keep scanning until stopped 
+ * @param duration of the scan in seconds. If 0, it will keep scanning until stopped
+ * @param active if we are performing an active (send scan requests) or passive (only listen to advertisements) scan
  */
-bool BLEApi::startScan(uint32_t duration)
+bool BLEApi::startScan(uint32_t duration, bool active)
 {
   if (!_isReady || _isScanning)
   {
     return false;
   }
   _isScanning = true;
-  if (duration == 0)
-  {
-    duration = DEFAULT_SCAN_DURATION;
-    _scanMustStop = false;
-  }
-  else
-  {
-    _scanMustStop = true;
-  }
   Serial.println("BLE Scan started");
+  bleScan->setActiveScan(active);
   bleScan->start(duration, _onScanFinished, true);
   return true;
 }
@@ -105,12 +96,11 @@ bool BLEApi::stopScan()
 {
   if (_isReady && _isScanning)
   {
-    _scanMustStop = true;
     bleScan->stop(); // this does not call the callback onScanFinished
     bleScan->clearResults();
     _isScanning = false;
     vTaskDelay(100 / portTICK_PERIOD_MS);
-    Serial.println("BLE Scan stopped on demand");
+    Serial.println("BLE Scan stopped");
     return true;
   }
   return false;
@@ -374,19 +364,9 @@ void BLEApi::_onDeviceInteractionProxy(BLEPeripheralID id, bool connected)
 
 void BLEApi::_onScanFinished(BLEScanResults results)
 {
-  if (_scanMustStop)
-  {
-    _isScanning = false;
-    bleScan->clearResults();
-    Serial.println("BLE Scan stopped finished");
-  }
-  else
-  {
-    meminfo();
-    Serial.println("BLE Scan restarted");
-    // Because of stupid callback
-    bleScan->start(DEFAULT_SCAN_DURATION, _onScanFinished, true);
-  }
+  _isScanning = false;
+  bleScan->clearResults();
+  Serial.println("BLE Scan stopped callback");
 }
 
 void BLEApi::_onCharacteristicNotification(NimBLERemoteCharacteristic *characteristic, uint8_t *data, size_t length, bool isNotify)

@@ -4,10 +4,6 @@
 #define CONFIG_BT_NIMBLE_ROLE_PERIPHERAL_DISABLED
 #define CONFIG_BT_NIMBLE_ROLE_BROADCASTER_DISABLED
 
-#ifndef DEFAULT_SCAN_DURATION
-#define DEFAULT_SCAN_DURATION 10
-#endif
-
 #ifndef MAX_CLIENT_CONNECTIONS
 #define MAX_CLIENT_CONNECTIONS 5
 #endif
@@ -38,7 +34,7 @@ class BLEApi
 public:
   static void init();
   static bool isReady();
-  static bool startScan(uint32_t duration = 0);
+  static bool startScan(uint32_t duration = 0, bool active = true);
   static bool stopScan();
   static void onDeviceFound(BLEDeviceFound cb);
   static void onDeviceConnected(BLEDeviceEvent cb);
@@ -61,7 +57,6 @@ private:
   friend class myClientCallbacks;
   static bool _isReady;
   static bool _isScanning;
-  static bool _scanMustStop;
   static NimBLEAdvertisedDeviceCallbacks *_advertisedDeviceCallback;
   static NimBLEClientCallbacks *_clientCallback;
   static NimBLEScan *bleScan;

@@ -189,8 +189,15 @@ void NobleApi::onWsEvent(uint8_t client, WStype_t type, uint8_t *payload, size_t
           if (strcmp(action, "startScanning") == 0)
           {
             // TODO: if the scan is already running, send the list of discovered devices
-            // TODO: setup services filter
-            BLEApi::startScan();
+            // TODO: setup (per connection ?) services filter
+
+            // more or less a hack to allow for passive scanning as noble API does not have such parameter
+            const bool active = command["allowDuplicates"];
+            if (active) {
+              BLEApi::startScan(0, false);
+            } else {
+              BLEApi::startScan(0, true);
+            }
           }
           else if (strcmp(action, "stopScanning") == 0)
           {
@@ -448,6 +455,7 @@ void NobleApi::sendJsonMessage(JsonDocument &command)
       {
         // ESP_LOG_BUFFER_HEXDUMP("Send", buffer, messageLength, esp_log_level_t::ESP_LOG_INFO);
         // Serial.printf("[%u] sent Text: %s\n", client, buffer);
+        // TODO: use service filter in case of discovery events
         ws->sendTXT(client, buffer);
       }
     }
